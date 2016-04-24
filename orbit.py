@@ -29,7 +29,7 @@ def kepler(E, e, M):
     return E - e*np.sin(E) - M
 
 # Calculates the radial velocities for given orbital parameters
-def get_RVs(K, T, t0, w, e, a, VZ, start, end, NT, N):
+def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     """
     Function that produces the time and radial velocities arrays given the
     following parameters. Radial velocities may be shifted by one quarter of a
@@ -42,10 +42,8 @@ def get_RVs(K, T, t0, w, e, a, VZ, start, end, NT, N):
     e = eccentricity
     a = semi-major axis
     VZ = proper motion [km/s]
-    start = start date [d]
-    end = end date [d]
     NT = number of points for one period
-    N = number of points between start and end dates
+    ts = array of times [d]
     """
 
     # Calculating RVs for one period
@@ -62,30 +60,28 @@ def get_RVs(K, T, t0, w, e, a, VZ, start, end, NT, N):
                     for fk in f])           # Radial velocities (km/s)
 
     # Calculating RVs in the specified time interval
-    ts = np.linspace(start, end, N)
     RVs = np.interp(ts, t, RV, period = T)
 
-    return ts, RVs
+    return RVs
 
 # Usage example
 def example():
     """Example using the parameters of the star HD 156846 and its planet
     HD 156846 b."""
+    ts = np.linspace(3600., 4200., 1000)
     start_time = time.time()
-    t, RVs = get_RVs(K = 0.464,
-                     T = 359.51,
-                     t0 = 3998.1,
-                     w = 52.2,
-                     e = 0.847,
-                     a = 0.9930,
-                     VZ = -68.54,
-                     start = 3600.,
-                     end = 4200.,
-                     NT = 1000,
-                     N = 1000)
+    RVs = get_RVs(K = 0.464,
+                  T = 359.51,
+                  t0 = 3998.1,
+                  w = 52.2,
+                  e = 0.847,
+                  a = 0.9930,
+                  VZ = -68.54,
+                  NT = 1000,
+                  ts = ts)
     print('RV calculation took %.4f seconds' % (time.time()-start_time))
 
-    plt.plot(t, RVs)
+    plt.plot(ts, RVs)
     plt.xlabel('JD - 2450000.0 (days)')
     plt.ylabel('RV (km/s)')
     plt.show()
