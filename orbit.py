@@ -32,8 +32,7 @@ def kepler(E, e, M):
 def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     """
     Function that produces the time and radial velocities arrays given the
-    following parameters. Radial velocities may be shifted by one quarter of a
-    period.
+    following parameters. Radial velocities may be mirrored.
 
     K = orbit parameter [km/s]
     T = period [d]
@@ -61,8 +60,30 @@ def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
 
     # Calculating RVs in the specified time interval
     RVs = np.interp(ts, t, RV, period = T)
-
     return RVs
+
+# Works the same as get_RVs, but the parameters that can't be negative are set
+# in log-scale
+def log_RVs(logK, logT, t0, w, loge, loga, VZ, NT, ts):
+    """
+    Function that produces the time and radial velocities arrays given the
+    following parameters. Radial velocities may be mirrored.
+
+    logK = ln of the orbit parameter K [km/s]
+    logT = ln of the period [d]
+    t0 = Time of periastron passage [d]
+    w = Argument of periapse [degrees]
+    loge = ln of the eccentricity
+    loga = ln of the semi-major axis
+    VZ = proper motion [km/s]
+    NT = number of points for one period
+    ts = array of times [d]
+    """
+    K = np.exp(logK)
+    T = np.exp(logT)
+    e = np.exp(loge)
+    a = np.exp(loga)
+    return get_RVs(K, T, t0, w, e, a, VZ, NT, ts)
 
 # Usage example
 def example():
@@ -70,12 +91,12 @@ def example():
     HD 156846 b."""
     ts = np.linspace(3600., 4200., 1000)
     start_time = time.time()
-    RVs = get_RVs(K = 0.464,
-                  T = 359.51,
+    RVs = log_RVs(logK = np.log(0.464),
+                  logT = np.log(359.51),
                   t0 = 3998.1,
                   w = 52.2,
-                  e = 0.847,
-                  a = 0.9930,
+                  loge = np.log(0.847),
+                  loga = np.log(0.9930),
                   VZ = -68.54,
                   NT = 1000,
                   ts = ts)
