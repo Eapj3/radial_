@@ -9,4 +9,4 @@ Features
 Issues
 -----------
 
-* Dealing with the function `arccos` is not optimal.
+* The radial velocities will be mirrored depending on which half of the arccos you shift. I arbitrarily chose the code to shift the second half.
