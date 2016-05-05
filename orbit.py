@@ -31,8 +31,8 @@ def kepler(E, e, M):
 # Calculates the radial velocities for given orbital parameters
 def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     """
-    Function that produces the time and radial velocities arrays given the
-    following parameters.
+    Function that produces the radial velocities arrays given the following 
+    parameters.
 
     K = orbit parameter [km/s]
     T = period [d]
@@ -62,25 +62,25 @@ def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
 
 # Works the same as get_RVs, but the parameters that can't be negative are set
 # in log-scale
-def log_RVs(logK, logT, t0, w, loge, loga, VZ, NT, ts):
+def log_RVs(lnK, lnT, t0, w, lne, lna, VZ, NT, ts):
     """
-    Function that produces the time and radial velocities arrays given the
-    following parameters.
+    Function that produces the radial velocities arrays given the following
+    parameters.
 
-    logK = ln of the orbit parameter K [km/s]
-    logT = ln of the period [d]
+    lnK = ln of the orbit parameter K [km/s]
+    lnT = ln of the period [d]
     t0 = Time of periastron passage [d]
     w = Argument of periapse [degrees]
-    loge = ln of the eccentricity
-    loga = ln of the semi-major axis
+    lne = ln of the eccentricity
+    lna = ln of the semi-major axis
     VZ = proper motion [km/s]
     NT = number of points for one period
     ts = array of times [d]
     """
-    K = np.exp(logK)
-    T = np.exp(logT)
-    e = np.exp(loge)
-    a = np.exp(loga)
+    K = np.exp(lnK)
+    T = np.exp(lnT)
+    e = np.exp(lne)
+    a = np.exp(lna)
     return get_RVs(K, T, t0, w, e, a, VZ, NT, ts)
 
 # Usage example
@@ -89,12 +89,12 @@ def example():
     HD 156846 b."""
     ts = np.linspace(3600., 4200., 1000)
     start_time = time.time()
-    RVs = log_RVs(logK = np.log(0.464),
-                  logT = np.log(359.51),
+    RVs = log_RVs(lnK = np.log(0.464),
+                  lnT = np.log(359.51),
                   t0 = 3998.1,
                   w = 52.2,
-                  loge = np.log(0.847),
-                  loga = np.log(0.9930),
+                  lne = np.log(0.847),
+                  lna = np.log(0.9930),
                   VZ = -68.54,
                   NT = 1000,
                   ts = ts)
