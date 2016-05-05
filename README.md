@@ -1,5 +1,5 @@
 # keppy
-Starting to write a code for estimating radial velocities of stars with a massive companion.
+A pure Python code for estimating radial velocities of stars with a massive companion.
 
 Features
 -----------
@@ -9,4 +9,4 @@ Features
 Issues
 -----------
 
-* The radial velocities will be mirrored depending on which half of the arccos you shift. I arbitrarily chose the code to shift the second half.
+* None at the moment.
