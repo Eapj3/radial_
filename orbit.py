@@ -82,25 +82,3 @@ def log_RVs(lnK, lnT, t0, w, lne, lna, VZ, NT, ts):
     e = np.exp(lne)
     a = np.exp(lna)
     return get_RVs(K, T, t0, w, e, a, VZ, NT, ts)
-
-# Usage example
-def example():
-    """Example using the parameters of the star HD 156846 and its planet
-    HD 156846 b."""
-    ts = np.linspace(3600., 4200., 1000)
-    start_time = time.time()
-    RVs = log_RVs(lnK = np.log(0.464),
-                  lnT = np.log(359.51),
-                  t0 = 3998.1,
-                  w = 52.2,
-                  lne = np.log(0.847),
-                  lna = np.log(0.9930),
-                  VZ = -68.54,
-                  NT = 1000,
-                  ts = ts)
-    print('RV calculation took %.4f seconds' % (time.time()-start_time))
-
-    plt.plot(ts, RVs)
-    plt.xlabel('JD - 2450000.0 (days)')
-    plt.ylabel('RV (km/s)')
-    plt.show()
