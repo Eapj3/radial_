@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.optimize as sp
+import math
 import time
 
 """
@@ -46,17 +47,15 @@ def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     """
 
     # Calculating RVs for one period
-    t = np.linspace(t0, t0+T, NT)           # Time (days)
-    M = 2*np.pi/T*(t-t0)                    # Mean anomaly
+    t = np.linspace(t0, t0+T, NT)                    # Time (days)
+    M = 2*np.pi/T*(t-t0)                             # Mean anomaly
     E = np.array([sp.newton(func = kepler, x0 = Mk, args = (e, Mk)) \
-                 for Mk in M])              # Eccentric anomaly
-    r = a*(1.-e*np.cos(E))                  # r coordinates
-    f = np.arccos(((a*(1.-e**2)/r)-1.0)/e)  # True anomalies
-    f[(NT-1)/2:] += 2*(np.pi-f[(NT-1)/2:])  # Shifting the second half of f
-    #f[:(NT-1)/2] += 2*(np.pi-f[:(NT-1)/2]) # Shifting the first half of f
-
+                 for Mk in M])                       # Eccentric anomaly
+    f = 2*np.arctan2(np.sqrt(1.+e)*np.sin(E/2), \
+                     np.sqrt(1.-e)*np.cos(E/2))      # True anomaly 
+    #r = a*(1.-e*np.cos(E))                          # r coordinates
     RV = np.array([vr(VZ, K, w, fk, e) \
-                    for fk in f])           # Radial velocities (km/s)
+                    for fk in f])                    # Radial velocities (km/s)
 
     # Calculating RVs in the specified time interval
     RVs = np.interp(ts, t, RV, period = T)
