@@ -4,7 +4,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.optimize as sp
-import math
 import time
 
 """
@@ -33,7 +32,7 @@ def kepler(E, e, M):
 def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     """
     Function that produces the time and radial velocities arrays given the
-    following parameters. Radial velocities may be mirrored.
+    following parameters.
 
     K = orbit parameter [km/s]
     T = period [d]
@@ -66,7 +65,7 @@ def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
 def log_RVs(logK, logT, t0, w, loge, loga, VZ, NT, ts):
     """
     Function that produces the time and radial velocities arrays given the
-    following parameters. Radial velocities may be mirrored.
+    following parameters.
 
     logK = ln of the orbit parameter K [km/s]
     logT = ln of the period [d]
