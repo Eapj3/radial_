@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.optimize as sp
-import time
 
 """
 This code is based on the formalism from Murray & Correia (2011), available
@@ -18,10 +16,10 @@ def K(m1, m2, n, a, I, e):
     return m2/(m1+m2)*n*a*np.sin(I)/np.sqrt(1.-e**2)
 
 # Calculates Eq. 65
-def vr(VZ, K, w, f, e):
+def vr(vz, K, w, f, e):
     """The radial velocities equation."""
     w *= np.pi/180.
-    return VZ + K*(np.cos(w+f) + e*np.cos(w))
+    return vz + K*(np.cos(w+f) + e*np.cos(w))
 
 # Calculates the Kepler equation (Eq. 41)
 def kepler(E, e, M):
@@ -50,11 +48,9 @@ def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
     M = 2*np.pi/T*(t-t0)                             # Mean anomaly
     E = np.array([sp.newton(func = kepler, x0 = Mk, args = (e, Mk)) \
                  for Mk in M])                       # Eccentric anomaly
-    f = 2*np.arctan2(np.sqrt(1.+e)*np.sin(E/2), \
-                     np.sqrt(1.-e)*np.cos(E/2))      # True anomaly 
-    #r = a*(1.-e*np.cos(E))                          # r coordinates
-    RV = np.array([vr(VZ, K, w, fk, e) \
-                    for fk in f])                    # Radial velocities (km/s)
+    f = 2*np.arctan2(np.sqrt(1.+e)*np.sin(E/2),
+                     np.sqrt(1.-e)*np.cos(E/2))      # True anomaly
+    RV = np.array([vr(VZ, K, w, fk, e) for fk in f]) # Radial velocities (km/s)
 
     # Calculating RVs in the specified time interval
     RVs = np.interp(ts, t, RV, period = T)
