@@ -21,7 +21,7 @@ def lnlike(theta, t, RV, RVerr, VZ, NT):
     NT = number of points for one period
     """
     K, T, t0, w, e, a = theta
-    model = orbit.get_RVs(K, T, t0, w, e, a, VZ, NT, t)
+    model = orbit.get_rvs(K, T, t0, w, e, a, VZ, NT, t)
     inv_sigma2 = 1./RVerr**2
     return -0.5*np.sum((RV-model)**2*inv_sigma2 + np.log(2.*np.pi/inv_sigma2))
 

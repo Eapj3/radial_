@@ -10,71 +10,89 @@ freely at http://arxiv.org/abs/1009.1738. The equation numbers are from this
 article, unless otherwise noted.
 """
 
+
 # Calculates the orbital parameter K (Eq. 66)
-def K(m1, m2, n, a, I, e):
+def k_orb(m1, m2, n, a, i, e):
     """This is an orbital parameter. Currently not in use by the code."""
-    return m2/(m1+m2)*n*a*np.sin(I)/np.sqrt(1.-e**2)
+    return m2/(m1+m2)*n*a*np.sin(i)/np.sqrt(1.-e**2)
+
 
 # Calculates Eq. 65
-def vr(vz, K, w, f, e):
-    """The radial velocities equation."""
+def vr(vz, k, w, f, e):
+    """
+    The radial velocities equation.
+
+    vz = Proper motion [km/s]
+    k = Orbital parameter K (Eq. 66) [km/s]
+    w = Argument of periapse [degrees]
+    f = True anomaly [rad]
+    e = Eccentricity
+    """
     w *= np.pi/180.
-    return vz + K*(np.cos(w+f) + e*np.cos(w))
+    return vz + k*(np.cos(w+f) + e*np.cos(w))
+
 
 # Calculates the Kepler equation (Eq. 41)
-def kepler(E, e, M):
-    """The Kepler equation."""
-    return E - e*np.sin(E) - M
+def kepler(e_anom, e, m_anom):
+    """
+    The Kepler equation.
+
+    e_anom = eccentric anomaly [rad]
+    e = eccentricity
+    m_anom = mean anomaly [rad]
+    """
+    return e_anom - e*np.sin(e_anom) - m_anom
+
 
 # Calculates the radial velocities for given orbital parameters
-def get_RVs(K, T, t0, w, e, a, VZ, NT, ts):
+def get_rvs(k, period, t0, w, e, vz, nt, ts):
     """
     Function that produces the radial velocities arrays given the following 
     parameters.
 
-    K = orbit parameter [km/s]
-    T = period [d]
+    k = Orbital parameter K [km/s]
+    period = orbital period [d]
     t0 = Time of periastron passage [d]
     w = Argument of periapse [degrees]
     e = eccentricity
     a = semi-major axis
-    VZ = proper motion [km/s]
-    NT = number of points for one period
+    vz = proper motion [km/s]
+    nt = number of points for one period
     ts = array of times [d]
     """
 
     # Calculating RVs for one period
-    t = np.linspace(t0, t0+T, NT)                    # Time (days)
-    M = 2*np.pi/T*(t-t0)                             # Mean anomaly
-    E = np.array([sp.newton(func = kepler, x0 = Mk, args = (e, Mk)) \
-                 for Mk in M])                       # Eccentric anomaly
-    f = 2*np.arctan2(np.sqrt(1.+e)*np.sin(E/2),
-                     np.sqrt(1.-e)*np.cos(E/2))      # True anomaly
-    RV = np.array([vr(VZ, K, w, fk, e) for fk in f]) # Radial velocities (km/s)
+    t = np.linspace(t0, t0+period, nt)                    # Time (days)
+    m_anom = 2*np.pi/period*(t-t0)                             # Mean anomaly
+    e_anom = np.array([sp.newton(func=kepler, x0 = mk, args = (e, mk)) \
+                 for mk in m_anom])                       # Eccentric anomaly
+    f = 2*np.arctan2(np.sqrt(1.+e)*np.sin(e_anom/2),
+                     np.sqrt(1.-e)*np.cos(e_anom/2))      # True anomaly
+    rv = np.array([vr(vz, k, w, fk, e) for fk in f]) # Radial velocities (km/s)
 
     # Calculating RVs in the specified time interval
-    RVs = np.interp(ts, t, RV, period = T)
-    return RVs
+    rvs = np.interp(ts, t, rv, period=period)
+    return rvs
 
-# Works the same as get_RVs, but the parameters that can't be negative are set
+
+# Works the same as get_rvs, but the parameters that can't be negative are set
 # in log-scale
-def log_RVs(lnK, lnT, t0, w, lne, lna, VZ, NT, ts):
+def log_rvs(log_k, log_period, t0, w, log_e, vz, nt, ts):
     """
     Function that produces the radial velocities arrays given the following
     parameters.
 
-    lnK = ln of the orbit parameter K [km/s]
-    lnT = ln of the period [d]
+    log_k = ln of the orbit parameter K [km/s]
+    log_period = ln of the period [d]
     t0 = Time of periastron passage [d]
     w = Argument of periapse [degrees]
-    lne = ln of the eccentricity
-    lna = ln of the semi-major axis
-    VZ = proper motion [km/s]
-    NT = number of points for one period
+    log_e = ln of the eccentricity
+    vz = proper motion [km/s]
+    nt = number of points for one period
     ts = array of times [d]
     """
-    K = np.exp(lnK)
-    T = np.exp(lnT)
-    e = np.exp(lne)
-    a = np.exp(lna)
-    return get_RVs(K, T, t0, w, e, a, VZ, NT, ts)
+    k = np.exp(log_k)
+    period = np.exp(log_period)
+    e = np.exp(log_e)
+    return get_rvs(k, period, t0, w, e, vz, nt, ts)
+
