@@ -3,12 +3,11 @@
 
 import numpy as np
 import scipy.optimize as op
-#import emcee
-#import corner
 import orbit
 
+
 # The likelihood function 
-def lnlike(theta, t, RV, RVerr, VZ, NT):
+def lnlike(theta, t, rv, rv_err, vz, nt):
     """
     This function produces the ln of the Gaussian likelihood function of a 
     given set of parameters producing the observed data (t, RV +/- RVerr). 
@@ -20,13 +19,14 @@ def lnlike(theta, t, RV, RVerr, VZ, NT):
     VZ = proper motion [km/s]
     NT = number of points for one period
     """
-    K, T, t0, w, e, a = theta
-    model = orbit.get_rvs(K, T, t0, w, e, a, VZ, NT, t)
-    inv_sigma2 = 1./RVerr**2
-    return -0.5*np.sum((RV-model)**2*inv_sigma2 + np.log(2.*np.pi/inv_sigma2))
+    k, period, t0, w, e = theta
+    model = orbit.get_rvs(k, period, t0, w, e, vz, nt, t)
+    inv_sigma2 = 1./rv_err**2
+    return -0.5*np.sum((rv-model)**2*inv_sigma2 + np.log(2.*np.pi/inv_sigma2))
+
 
 # Maximum likelihood estimation of orbital parameters
-def ml_orbit(t, RV, RVerr, guess, bnds, VZ, NT):
+def ml_orbit(t, rv, rv_err, guess, bnds, vz, nt):
     """
     This function produces the maximum likelihood estimation of the orbital
     parameters.
@@ -39,20 +39,20 @@ def ml_orbit(t, RV, RVerr, guess, bnds, VZ, NT):
     VZ = proper motion [km/s]
     NT = number of points for one period
     """
-    #x0 = [K_true, T_true, t0_true, w_true, e_true, a_true], 
-    #bnds = ((0, 1),(300, 400),(3600, 4200),(0, 360),(0, 1),(0, 5))
+
     nll = lambda *args: -lnlike(*args)
-    result = op.minimize(fun = nll, 
-                         x0 = guess,
-                         args=(t, RV, RVerr, VZ, NT),
-                         method = 'TNC',
-                         bounds = bnds)
-    K_ml, T_ml, t0_ml, w_ml, e_ml, a_ml = result["x"]
-    return [K_ml, T_ml, t0_ml, w_ml, e_ml, a_ml]
+    result = op.minimize(fun=nll,
+                         x0=guess,
+                         args=(t, rv, rv_err, vz, nt),
+                         method='TNC',
+                         bounds=bnds)
+    k_ml, period_ml, t0_ml, w_ml, e_ml = result["x"]
+    return [k_ml, period_ml, t0_ml, w_ml, e_ml]
+
 
 # XXX Things below here are under development
 """
-# emcee ######################3
+# emcee ######################
 
 # Priors
 def lnprior(theta):
@@ -74,6 +74,7 @@ def lnprob(theta, x, y, yerr, VZ, NT):
 
 ndim, nwalkers = 6, 100
 pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(t_d, RV_d, RV_err, VZ, NT))
+sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(t_d, RV_d, RV_err,
+                                VZ, NT))
 sampler.run_mcmc(pos, 500)
 """
