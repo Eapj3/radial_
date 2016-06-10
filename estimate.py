@@ -10,14 +10,14 @@ import orbit
 def lnlike(theta, t, rv, rv_err, vz, nt):
     """
     This function produces the ln of the Gaussian likelihood function of a 
-    given set of parameters producing the observed data (t, RV +/- RVerr). 
+    given set of parameters producing the observed data (t, rv +/- rv_err).
     
-    theta = array containing the 6 parameters K, T, t0, w, e and a
+    theta = array containing the 6 parameters k, period, t0, w and e
     t = array of time [d]
-    RV = array of radial velocities [km/s]
-    RVerr = array of uncertainties in radial velocities [km/s]
-    VZ = proper motion [km/s]
-    NT = number of points for one period
+    rv = array of radial velocities [km/s]
+    rv_err = array of uncertainties in radial velocities [km/s]
+    vz = proper motion [km/s]
+    nt = number of points for one period
     """
     k, period, t0, w, e = theta
     model = orbit.get_rvs(k, period, t0, w, e, vz, nt, t)
@@ -32,14 +32,13 @@ def ml_orbit(t, rv, rv_err, guess, bnds, vz, nt):
     parameters.
     
     t = array of time [d]
-    RV = array of radial velocities [km/s]
-    RVerr = array of uncertainties in radial velocities [km/s]
+    rv = array of radial velocities [km/s]
+    rv_err = array of uncertainties in radial velocities [km/s]
     guess = an array containing the first guesses of the parameters
     bnds = a sequence of tuples containing the bounds of the parameters
-    VZ = proper motion [km/s]
-    NT = number of points for one period
+    vz = proper motion [km/s]
+    nt = number of points for one period
     """
-
     nll = lambda *args: -lnlike(*args)
     result = op.minimize(fun=nll,
                          x0=guess,
