@@ -1,5 +1,7 @@
 # Files to be untracked for now
 test.py
+.DS*
+.idea/
 
 # Automatic backups
 *.swp
