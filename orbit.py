@@ -11,7 +11,7 @@ article, unless otherwise noted.
 """
 
 
-# Calculates the orbital parameter K (Eq. 66)
+# Calculates the orbital parameter K (Eq. 66) -- velocity semi-amplitude
 def k_orb(m1, m2, n, a, i, e):
     """This is an orbital parameter. Currently not in use by the code."""
     return m2/(m1+m2)*n*a*np.sin(i)/np.sqrt(1.-e**2)
@@ -23,7 +23,7 @@ def vr(vz, k, w, f, e):
     The radial velocities equation.
 
     vz = Proper motion [km/s]
-    k = Orbital parameter K (Eq. 66) [km/s]
+    k = Velocity semi-amplitude (Eq. 66) [km/s]
     w = Argument of periapse [degrees]
     f = True anomaly [rad]
     e = Eccentricity
@@ -50,7 +50,7 @@ def get_rvs(k, period, t0, w, e, vz, nt, ts):
     Function that produces the radial velocities arrays given the following 
     parameters.
 
-    k = Orbital parameter K [km/s]
+    k = Velocity semi-amplitude [km/s]
     period = orbital period [d]
     t0 = Time of periastron passage [d]
     w = Argument of periapse [degrees]
@@ -82,7 +82,7 @@ def log_rvs(log_k, log_period, t0, w, log_e, vz, nt, ts):
     Function that produces the radial velocities arrays given the following
     parameters.
 
-    log_k = ln of the orbit parameter K [km/s]
+    log_k = ln of the velocity semi-amplitude [km/s]
     log_period = ln of the period [d]
     t0 = Time of periastron passage [d]
     w = Argument of periapse [degrees]
