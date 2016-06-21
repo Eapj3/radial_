@@ -88,6 +88,3 @@ def ml_example():
     plt.ylabel('RV (km/s)')
     plt.legend(numpoints=1)
     plt.show()
-
-
-ml_example()
