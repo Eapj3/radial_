@@ -8,7 +8,7 @@ import emcee
 
 
 # The likelihood function 
-def lnlike(theta, t, rv, rv_err, vz, nt=1000):
+def lnlike(theta, t, rv, rv_err, vz):
     """
     This function produces the ln of the Gaussian likelihood function of a 
     given set of parameters producing the observed data (t, rv +/- rv_err).
@@ -20,15 +20,18 @@ def lnlike(theta, t, rv, rv_err, vz, nt=1000):
     vz = proper motion [km/s]
     nt = number of points for one period. Default=1000
     """
-    log_k, log_period, t0, w, log_e = theta
-    model = orbit.log_rvs(log_k, log_period, t0, w, log_e, vz, nt, t)
+    nt = len(t)
+    k, period, t0, w, e = theta
+    model = orbit.get_rvs(k, period, t0, w, e, vz, nt, t)
+    # log_k, log_period, t0, w, log_e = theta
+    # model = orbit.log_rvs(log_k, log_period, t0, w, log_e, vz, nt, t)
     inv_sigma2 = 1./rv_err**2
     return -0.5*np.sum((rv-model)**2*inv_sigma2 + np.log(2.*np.pi/inv_sigma2))
 
 
 # Maximum likelihood estimation of orbital parameters
-def ml_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
-             nt=1000, maxiter=200):
+def ml_orbit(t, rv, rv_err, guess, vz, k_interval=30., t0_interval=100.,
+             maxiter=200):
     """
     This function produces the maximum likelihood estimation of the orbital
     parameters.
@@ -38,21 +41,19 @@ def ml_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
     rv_err = array of uncertainties in radial velocities [km/s]
     guess = an array containing the first guesses of the parameters
     vz = proper motion [km/s]
-    k_max = upper limit of the velocity semi-amplitude [km/s]
-    t0_min = lower limit of the time of periapse passage [JD-2.45E6 days],
-    default=0.
-    t0_max = lower limit of the time of periapse passage [JD-2.45E6 days],
-    default=7500.
     nt = number of points for one period. Default = 1000
     maxiter = maximum number of iterations on scipy.minimize. Default = 200
     """
     nll = lambda *args: -lnlike(*args)
     result = op.minimize(fun=nll,
                          x0=guess,
-                         args=(t, rv, rv_err, vz, nt),
+                         args=(t, rv, rv_err, vz),
                          method='TNC',
-                         bounds=((0, k_max), (0, 1E4), (t0_min, t0_max),
-                                 (0, 360), (0, 1)),
+                         bounds=((0., guess[0]+k_interval),
+                                 (0, 1E4),
+                                 (guess[2]-t0_interval, guess[2]+t0_interval),
+                                 (0, 360),
+                                 (0, 0.999999)),
                          options={'maxiter': maxiter})
     return result["x"]
 
@@ -60,7 +61,7 @@ def ml_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
 # XXX Things below here are under very active development
 
 # emcee ######################
-
+'''
 # Priors
 def auto_lnprior(theta, k_max, t0_min, t0_max):
     """
@@ -134,3 +135,4 @@ def emcee_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
     sampler.run_mcmc(pos, nsteps)
     samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
     return samples
+'''
