@@ -8,7 +8,7 @@ import time
 # Simple radial velocities example
 def rvs_example():
     """
-    Example on obtaining radial velocities using the parameters of the star 
+    Example on obtaining radial velocities using the parameters of the star
     HD 156846 and its planet HD 156846 b.
     """
     ts = np.linspace(3600., 4200., 1000)
@@ -58,18 +58,15 @@ def ml_example():
     rv_derr = np.array([0.03 + np.random.normal(loc=0.0, scale=0.005)
                         for k in rvs])
     # Estimating the orbital parameters using the true parameters as guess
-    guess = [k_true, period_true, t0_true, w_true, e_true],
-    bnds = ((0, 1), (300, 400), (3600, 4200), (0, 360), (0, 1))
+    guess = [k_true, period_true, t0_true, w_true, e_true]
     print('Starting maximum likelihood estimation.')
     start_time = time.time()
-    params_ml = estimate.ml_orbit(t_d, rv_d, rv_derr,
-                                  guess=guess,
-                                  bnds=bnds,
-                                  vz=vz, nt=nt)
+    params_ml = estimate.ml_orbit(t_d, rv_d, rv_derr, guess=guess, vz=vz, nt=nt,
+                                  t0_min=3600, t0_max=4200)
     print('Orbital parameters estimation took %.4f seconds' %
           (time.time()-start_time))
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f' %
-          (params_ml[0], params_ml[1], params_ml[2], params_ml[3], 
+          (params_ml[0], params_ml[1], params_ml[2], params_ml[3],
            params_ml[4]))
     rv_est = orbit.get_rvs(k=params_ml[0],
                            period=params_ml[1],
