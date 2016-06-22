@@ -61,8 +61,7 @@ def ml_example():
     guess = [k_true, period_true, t0_true, w_true, e_true]
     print('Starting maximum likelihood estimation.')
     start_time = time.time()
-    params_ml = estimate.ml_orbit(t_d, rv_d, rv_derr, guess=guess, vz=vz, nt=nt,
-                                  t0_min=3600, t0_max=4200)
+    params_ml = estimate.ml_orbit(t_d, rv_d, rv_derr, guess=guess, vz=vz)
     print('Orbital parameters estimation took %.4f seconds' %
           (time.time()-start_time))
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f' %
