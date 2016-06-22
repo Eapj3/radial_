@@ -4,11 +4,11 @@
 import numpy as np
 import scipy.optimize as op
 import orbit
-#import emcee
+import emcee
 
 
 # The likelihood function 
-def lnlike(theta, t, rv, rv_err, vz, nt):
+def lnlike(theta, t, rv, rv_err, vz, nt=1000):
     """
     This function produces the ln of the Gaussian likelihood function of a 
     given set of parameters producing the observed data (t, rv +/- rv_err).
@@ -18,16 +18,17 @@ def lnlike(theta, t, rv, rv_err, vz, nt):
     rv = array of radial velocities [km/s]
     rv_err = array of uncertainties in radial velocities [km/s]
     vz = proper motion [km/s]
-    nt = number of points for one period
+    nt = number of points for one period. Default=1000
     """
-    k, period, t0, w, e = theta
-    model = orbit.get_rvs(k, period, t0, w, e, vz, nt, t)
+    log_k, log_period, t0, w, log_e = theta
+    model = orbit.log_rvs(log_k, log_period, t0, w, log_e, vz, nt, t)
     inv_sigma2 = 1./rv_err**2
     return -0.5*np.sum((rv-model)**2*inv_sigma2 + np.log(2.*np.pi/inv_sigma2))
 
 
 # Maximum likelihood estimation of orbital parameters
-def ml_orbit(t, rv, rv_err, guess, bnds, vz, nt, maxiter=200):
+def ml_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
+             nt=1000, maxiter=200):
     """
     This function produces the maximum likelihood estimation of the orbital
     parameters.
@@ -36,9 +37,13 @@ def ml_orbit(t, rv, rv_err, guess, bnds, vz, nt, maxiter=200):
     rv = array of radial velocities [km/s]
     rv_err = array of uncertainties in radial velocities [km/s]
     guess = an array containing the first guesses of the parameters
-    bnds = a sequence of tuples containing the bounds of the parameters
     vz = proper motion [km/s]
-    nt = number of points for one period
+    k_max = upper limit of the velocity semi-amplitude [km/s]
+    t0_min = lower limit of the time of periapse passage [JD-2.45E6 days],
+    default=0.
+    t0_max = lower limit of the time of periapse passage [JD-2.45E6 days],
+    default=7500.
+    nt = number of points for one period. Default = 1000
     maxiter = maximum number of iterations on scipy.minimize. Default = 200
     """
     nll = lambda *args: -lnlike(*args)
@@ -46,17 +51,18 @@ def ml_orbit(t, rv, rv_err, guess, bnds, vz, nt, maxiter=200):
                          x0=guess,
                          args=(t, rv, rv_err, vz, nt),
                          method='TNC',
-                         bounds=bnds,
+                         bounds=((0, k_max), (0, 1E4), (t0_min, t0_max),
+                                 (0, 360), (0, 1)),
                          options={'maxiter': maxiter})
     return result["x"]
 
 
-# XXX Things below here are under development
-'''
+# XXX Things below here are under very active development
+
 # emcee ######################
 
 # Priors
-def auto_lnprior(theta, k_max=60., t0_min=0., t0_max=7500.):
+def auto_lnprior(theta, k_max, t0_min, t0_max):
     """
     This function semi-automatically produces flat priors for the orbital
     parameters. It's not completely automatic because the user still has to
@@ -65,35 +71,66 @@ def auto_lnprior(theta, k_max=60., t0_min=0., t0_max=7500.):
 
     :param theta: array with shape [1,5] containing the values of the orbital
     parameters log_k, log_period, t0, w, log_e
-    :param k_max: upper limit of the velocity semi-amplitude [km/s], default=60.
-    :param t0_min: lower limit of the time of periapse passage [JD-2.45E6 days],
-    default=0.
-    :param t0_max: upper limit of the time of periapse passage [JD-2.45E6 days],
-    default=7500.
+    :param k_max: upper limit of the velocity semi-amplitude [km/s]
+    :param t0_min: lower limit of the time of periapse passage [JD-2.45E6 days]
+    :param t0_max: upper limit of the time of periapse passage [JD-2.45E6 days]
     :return: zero if all parameters are inside the flat prior interval, -inf
     otherwise
     """
     log_k, log_period, t0, w, log_e = theta
-    if -3.0 < log_k < np.log10(k_max) and \
-        0. < log_period < 4. and \
+    if np.log(0.0001) < log_k < np.log(k_max) and \
+        0. < log_period < np.log(10000) and \
         t0_min < t0 < t0_max and \
         0. < w < 360. and \
-       -3 < log_e < -0.001:
+        np.log(0.0001) < log_e < np.log(0.9999):
         return 0.0
     return -np.inf
 
 
 # The probability
-def lnprob(theta, x, y, yerr, vz, nt):
-    lp = auto_lnprior(theta)
+def lnprob(theta, x, y, yerr, vz, k_max, t0_min, t0_max):
+    """
+
+    :param theta:
+    :param x:
+    :param y:
+    :param yerr:
+    :param vz:
+    :param k_max:
+    :param t0_min:
+    :param t0_max:
+    :return:
+    """
+    lp = auto_lnprior(theta, k_max, t0_min, t0_max)
     if not np.isfinite(lp):
         return -np.inf
-    return lp + lnlike(theta, x, y, yerr, vz, nt)
+    return lp + lnlike(theta, x, y, yerr, vz)
 
-ndim, nwalkers = 5, 100
 
-pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
-sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(t_d, RV_d, RV_err,
-                                VZ, NT))
-sampler.run_mcmc(pos, 500)
-'''
+# Using emcee to estimate the orbital parameters
+def emcee_orbit(t, rv, rv_err, guess, vz, k_max=60., t0_min=0., t0_max=7500.,
+                nwalkers=50, nsteps=200, ncut=50):
+    """
+
+    :param t:
+    :param rv:
+    :param rv_err:
+    :param guess:
+    :param vz:
+    :param k_max:
+    :param t0_min:
+    :param t0_max:
+    :param nwalkers:
+    :param nsteps:
+    :return:
+    """
+    ndim = 5
+    pos = np.array([guess + 1e-3*np.random.randn(ndim) for i in range(nwalkers)])
+    pos[:, 0] = np.log(pos[:, 0])
+    pos[:, 1] = np.log(pos[:, 1])
+    pos[:, 4] = np.log(pos[:, 4])
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(t, rv, rv_err,
+                                    vz, k_max, t0_min, t0_max))
+    sampler.run_mcmc(pos, nsteps)
+    samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
+    return samples
