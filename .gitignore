@@ -1,3 +1,10 @@
+# Temporarily ignore
+Makefile
+conf.py
+*.rst
+*.bat
+examples.py
+
 # Files to be untracked for now
 test.py
 .DS*
