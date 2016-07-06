@@ -144,7 +144,7 @@ def get_rvs(k, period, t0, w, e, vz, nt, ts):
     return rvs
 
 
-# Works the same as get_rvs, but the parameters that can't be negative are set
+# Works the same as get_rvs, but the parameters that cannot be negative are set
 # in log-scale
 def log_rvs(log_k, log_period, t0, w, log_e, vz, nt, ts):
     """
