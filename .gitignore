@@ -1,9 +1,6 @@
 # Temporarily ignore
 Makefile
 conf.py
-*.rst
-*.bat
-examples.py
 
 # Files to be untracked for now
 test.py
@@ -75,3 +72,8 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+_build/
+_static/
+_templates/
+index.rst
+make.bat
