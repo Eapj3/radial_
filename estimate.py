@@ -3,16 +3,27 @@
 
 import numpy as np
 import scipy.optimize as op
-import orbit
+import kepler
 import emcee
 
 """
-This code utilizes the Markov-Chain Monte Carlo estimation code emcee. Before
-using it, it is highly recommended to read the documentation of emcee in order
-to understand what are priors, probabilities, sampling and other jargon. Check
-it out here: http://dan.iel.fm/emcee/current/
+This code contains routines to estimate the orbital parameters of a binary
+system by means of maximum likelihood estimation or a Markov-Chain Monte Carlo
+estimation using the code emcee. Before using it, it is highly recommended to
+read the documentation of emcee in order to understand what are priors,
+probabilities, sampling and other jargon. Check it out at
+http://dan.iel.fm/emcee/current/
 """
 
+
+class OrbitalParams(object):
+    """
+    """
+    def __init__(self, t, rv, rv_err, vz):
+        self.t = t
+        self.rv = rv
+        self.rv_err = rv_err
+        self.vz = vz
 
 # The likelihood function 
 def lnlike(theta, t, rv, rv_err, vz):
