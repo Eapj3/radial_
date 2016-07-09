@@ -34,6 +34,9 @@ class BinarySystem(object):
         self.e = e
         self.vz = vz
         self.w_rad = w * np.pi / 180.
+        self.log_k = np.log(k)
+        self.log_period = np.log(period)
+        self.log_e = np.log(e)
 
     # Calculates Eq. 65
     def vr(self, f):
@@ -94,43 +97,23 @@ class BinarySystem(object):
         rvs = np.interp(ts, t, rv, period=self.period)
         return rvs
 
+    # Works the same as get_rvs, but the parameters that cannot be negative are
+    # set in log-scale
+    def log_rvs(self, ts, nt=1000):
+        """
+        Method that produces the radial velocities arrays given the following
+        parameters. NOT USABLE.
 
-# Works the same as get_rvs, but the parameters that cannot be negative are set
-# in log-scale
-def log_rvs(log_k, log_period, t0, w, log_e, vz, nt, ts):
-    """
-    Function that produces the radial velocities arrays given the following
-    parameters.
+        :param nt:
+            Number of points for one period
 
-    :param log_k:
-        ln of velocity semi-amplitude [km/s]
+        :param ts:
+            Array of times [d]
 
-    :param log_period:
-        ln of orbital period [days]
-
-    :param t0:
-        Time of periastron passage [days]
-
-    :param w:
-        Argument of periapse [degrees]
-
-    :param log_e:
-        ln of eccentricity of the orbit
-
-    :param vz:
-        Proper motion [km/s]
-
-    :param nt:
-        Number of points for one period
-
-    :param ts:
-        Array of times [d]
-
-    :return:
-        Array of radial velocities [km/s]
-
-    """
-    k = np.exp(log_k)
-    period = np.exp(log_period)
-    e = np.exp(log_e)
-    return get_rvs(k, period, t0, w, e, vz, nt, ts)
+        :return:
+            Array of radial velocities [km/s]
+        """
+        k = np.exp(self.log_k)
+        period = np.exp(self.log_period)
+        e = np.exp(self.log_e)
+        return self.get_rvs(k, period, self.t0, self.w, e, self.vz, nt, ts)
