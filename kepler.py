@@ -8,7 +8,7 @@ import scipy.optimize as sp
 This module computes the radial velocities of a massive object being orbited by
 a secondary massive object, and is based on the formalism from Murray & Correia
 (2011), available freely at http://arxiv.org/abs/1009.1738. The equation numbers
- re from this article, unless otherwise noted.
+are from this article, unless otherwise noted.
 """
 
 
@@ -17,26 +17,26 @@ class BinarySystem(object):
     A class that computes the radial velocities given the orbital parameters of
     the binary system.
     """
-    def __init__(self, k, period, t0, w, e, vz):
+    def __init__(self, log_k, log_period, t0, w, log_e, vz):
         """
 
-        :param k:
-        :param period:
+        :param log_k:
+        :param log_period:
         :param t0:
         :param w:
-        :param e:
+        :param log_e:
         :param vz:
         """
-        self.k = k
-        self.period = period
+        self.log_k = log_k
+        self.log_period = log_period
         self.t0 = t0
         self.w = w
-        self.e = e
+        self.log_e = log_e
         self.vz = vz
         self.w_rad = w * np.pi / 180.
-        self.log_k = np.log(k)
-        self.log_period = np.log(period)
-        self.log_e = np.log(e)
+        self.k = 10 ** log_k
+        self.period = 10 ** log_period
+        self.e = 10 ** log_e
 
     # Calculates Eq. 65
     def vr(self, f):
@@ -96,24 +96,3 @@ class BinarySystem(object):
         # Calculating RVs in the specified time interval
         rvs = np.interp(ts, t, rv, period=self.period)
         return rvs
-
-    # Works the same as get_rvs, but the parameters that cannot be negative are
-    # set in log-scale
-    def log_rvs(self, ts, nt=1000):
-        """
-        Method that produces the radial velocities arrays given the following
-        parameters. NOT USABLE.
-
-        :param nt:
-            Number of points for one period
-
-        :param ts:
-            Array of times [d]
-
-        :return:
-            Array of radial velocities [km/s]
-        """
-        k = np.exp(self.log_k)
-        period = np.exp(self.log_period)
-        e = np.exp(self.log_e)
-        return self.get_rvs(k, period, self.t0, self.w, e, self.vz, nt, ts)
