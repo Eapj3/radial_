@@ -34,22 +34,22 @@ class OrbitalParams(object):
         given set of parameters producing the observed data (t, rv +/- rv_err).
 
         :param theta:
-            Array containing the 5 parameters k, period, t0, w and e
+            Array containing the 5 parameters log_k, log_period, t0, w and log_e
 
         :return:
-            The ln of the likelihood of the signal rv being the result of a model
-            with parameters theta
+            The ln of the likelihood of the signal rv being the result of a
+            model with parameters theta
         """
         nt = len(self.t)
-        k, period, t0, w, e = theta
-        system = kepler.BinarySystem(k, period, t0, w, e, self.vz)
+        log_k, log_period, t0, w, log_e = theta
+        system = kepler.BinarySystem(log_k, log_period, t0, w, log_e, self.vz)
         model = system.get_rvs(ts=self.t, nt=nt)
         inv_sigma2 = 1. / self.rv_err ** 2
         return -0.5 * np.sum((self.rv - model) ** 2 * inv_sigma2 +
                              np.log(2. * np.pi / inv_sigma2))
 
     # Maximum likelihood estimation of orbital parameters
-    def ml_orbit(self, guess, k_interval=30., t0_interval=100., maxiter=200):
+    def ml_orbit(self, guess, log_k_interval=2., t0_interval=100., maxiter=200):
         """
         This method produces the maximum likelihood estimation of the orbital
         parameters.
@@ -57,49 +57,49 @@ class OrbitalParams(object):
         :param guess:
             An array containing the first guesses of the parameters
 
-        :param k_interval:
+        :param log_k_interval:
             Interval that sets the upper bound for the scipy.optimize.minimize()
-            function around the values of K in guess
+            function around the values of log10(K) in guess
 
         :param t0_interval:
-            Interval that sets the bounds for the scipy.optimize.minimize() function
-            around the value of t0 in guess
+            Interval that sets the bounds for the scipy.optimize.minimize()
+            function around the value of t0 in guess
 
         :param maxiter:
             Maximum number of iterations on scipy.minimize. Default=200
 
         :return:
-            An array with the estimated values of the parameters that best model the
-            signal rv
+            An array with the estimated values of the parameters that best model
+            the signal rv
 
         """
         nll = lambda *args: -self.lnlike(*args)
         result = op.minimize(fun=nll,
                              x0=guess,
                              method='TNC',
-                             bounds=((0.0001, guess[0] + k_interval),
-                                     (0.0001, 10000),
+                             bounds=((-4, guess[0] + log_k_interval),
+                                     (-4, 4),
                                      (guess[2] - t0_interval,
                                       guess[2] + t0_interval),
-                                     (0.0001, 359.999),
-                                     (0.0001, 0.9999)),
+                                     (0, 360),
+                                     (-4, -0.0001)),
                              options={'maxiter': maxiter})
         return result["x"]
 
     # Generating priors for Markov-Chain Monte Carlo estimation
     @staticmethod
-    def auto_lnprior(theta, k_max, t0_min, t0_max):
+    def auto_lnprior(theta, log_k_max, t0_min, t0_max):
         """
         This method semi-automatically produces flat priors for the orbital
         parameters. It's not completely automatic because the user still has to
-        provide the upper limit for the velocity semi-amplitude and the lower and
-        upper limits for the time of periapse passage
+        provide the upper limit for the velocity semi-amplitude and the lower
+        and upper limits for the time of periapse passage
 
         :param theta:
-            Array with shape [1,5] containing the values of the orbital parameters
-            log_k, log_period, t0, w, log_e
+            Array with shape [1,5] containing the values of the orbital
+            parameters log_k, log_period, t0, w, log_e
 
-        :param k_max:
+        :param log_k_max:
             Upper limit of the velocity semi-amplitude [km/s]
 
         :param t0_min:
@@ -112,29 +112,26 @@ class OrbitalParams(object):
             Zero if all parameters are inside the flat prior interval, -inf
             otherwise
         """
-        k, period, t0, w, e = theta
-        log_k = np.log(k)
-        log_period = np.log(period)
-        log_e = np.log(e)
-        if np.log(0.0001) < log_k < np.log(k_max) and \
-           0. < log_period < np.log(10000) and \
+        log_k, log_period, t0, w, log_e = theta
+        if -4 < log_k < log_k_max and \
+           0. < log_period < 4 and \
            t0_min < t0 < t0_max and \
            0. < w < 360. and \
-           np.log(0.0001) < log_e < np.log(0.9999):
+           -4 < log_e < -0.0001:
             return 0.0
         return -np.inf
 
     # The probability
-    def lnprob(self, theta, k_max, t0_min, t0_max):
+    def lnprob(self, theta, log_k_max, t0_min, t0_max):
         """
-        This function calculates the ln of the probabilities to be used in the MCMC
-        esitmation.
+        This function calculates the ln of the probabilities to be used in the
+        MCMC esitmation.
 
         :param theta:
-            Array with shape [1,5] containing the values of the orbital parameters
-            log_k, log_period, t0, w, log_e
+            Array with shape [1,5] containing the values of the orbital
+            parameters log_k, log_period, t0, w, log_e
 
-        :param k_max:
+        :param log_k_max:
             Upper limit of the velocity semi-amplitude [km/s]
 
         :param t0_min:
@@ -147,13 +144,13 @@ class OrbitalParams(object):
             The probability of the signal rv being the result of a model with the
             parameters theta
         """
-        lp = self.auto_lnprior(theta, k_max, t0_min, t0_max)
+        lp = self.auto_lnprior(theta, log_k_max, t0_min, t0_max)
         if not np.isfinite(lp):
             return -np.inf
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, guess, k_max=100., t0_min=0., t0_max=7500.,
+    def emcee_orbit(self, guess, log_k_max=2., t0_min=0., t0_max=7500.,
                     nwalkers=20, nsteps=1000, ncut=50, nthreads=1):
         """
         Calculates samples of parameters that best fit the signal rv.
@@ -161,7 +158,7 @@ class OrbitalParams(object):
         :param guess:
             An array containing the first guesses of the parameters
 
-        :param k_max:
+        :param log_k_max:
             Upper limit of the velocity semi-amplitude [km/s]
 
         :param t0_min:
@@ -183,14 +180,14 @@ class OrbitalParams(object):
             Number of threads in your machine
 
         :return:
-            emcee samples that can be used to make a triangle plot using the corner
-            routine
+            emcee samples that can be used to make a triangle plot using the
+            corner routine
         """
         ndim = 5
         pos = np.array([guess + 1e-3 * np.random.randn(ndim)
                         for i in range(nwalkers)])
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        args=(k_max, t0_min, t0_max),
+                                        args=(log_k_max, t0_min, t0_max),
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
