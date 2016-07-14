@@ -20,6 +20,18 @@ class OrbitalParams(object):
     """
     A class that computes the orbital parameters of a binary system given its
     radial velocities (and their uncertainties) in function of time.
+
+    :param t: array
+        Time [JD - 2.4E6 days]
+
+    :param rv: array
+        Radial velocities [km/s]
+
+    :param rv_err: array
+        Uncertainties of the radial velocities [km/s]
+
+    :param vz: scalar
+        Proper motion [km/s]
     """
     def __init__(self, t, rv, rv_err, vz):
         self.t = t
@@ -33,10 +45,10 @@ class OrbitalParams(object):
         This method produces the ln of the Gaussian likelihood function of a
         given set of parameters producing the observed data (t, rv +/- rv_err).
 
-        :param theta:
+        :param theta: array
             Array containing the 5 parameters log_k, log_period, t0, w and log_e
 
-        :return:
+        :return: float
             The ln of the likelihood of the signal rv being the result of a
             model with parameters theta
         """
@@ -54,21 +66,21 @@ class OrbitalParams(object):
         This method produces the maximum likelihood estimation of the orbital
         parameters.
 
-        :param guess:
+        :param guess: array
             An array containing the first guesses of the parameters
 
-        :param log_k_interval:
+        :param log_k_interval: scalar
             Interval that sets the upper bound for the scipy.optimize.minimize()
             function around the values of log10(K) in guess
 
-        :param t0_interval:
+        :param t0_interval: scalar
             Interval that sets the bounds for the scipy.optimize.minimize()
             function around the value of t0 in guess
 
-        :param maxiter:
+        :param maxiter: int
             Maximum number of iterations on scipy.minimize. Default=200
 
-        :return:
+        :return: array
             An array with the estimated values of the parameters that best model
             the signal rv
 
@@ -95,20 +107,20 @@ class OrbitalParams(object):
         provide the upper limit for the velocity semi-amplitude and the lower
         and upper limits for the time of periapse passage
 
-        :param theta:
+        :param theta: array
             Array with shape [1,5] containing the values of the orbital
             parameters log_k, log_period, t0, w, log_e
 
-        :param log_k_max:
+        :param log_k_max: scalar
             Upper limit of the velocity semi-amplitude [km/s]
 
-        :param t0_min:
+        :param t0_min: scalar
             Lower limit of the time of periapse passage [JD-2.45E6 days]
 
-        :param t0_max:
+        :param t0_max: scalar
             Upper limit of the time of periapse passage [JD-2.45E6 days]
 
-        :return:
+        :return: scalar
             Zero if all parameters are inside the flat prior interval, -inf
             otherwise
         """
@@ -127,20 +139,20 @@ class OrbitalParams(object):
         This function calculates the ln of the probabilities to be used in the
         MCMC esitmation.
 
-        :param theta:
+        :param theta: array
             Array with shape [1,5] containing the values of the orbital
             parameters log_k, log_period, t0, w, log_e
 
-        :param log_k_max:
+        :param log_k_max: scalar
             Upper limit of the velocity semi-amplitude [km/s]
 
-        :param t0_min:
+        :param t0_min: scalar
             Lower limit of the time of periapse passage [JD-2.45E6 days]
 
-        :param t0_max:
+        :param t0_max: scalar
             Upper limit of the time of periapse passage [JD-2.45E6 days]
 
-        :return:
+        :return: scalar
             The probability of the signal rv being the result of a model with the
             parameters theta
         """
@@ -155,31 +167,31 @@ class OrbitalParams(object):
         """
         Calculates samples of parameters that best fit the signal rv.
 
-        :param guess:
+        :param guess: array
             An array containing the first guesses of the parameters
 
-        :param log_k_max:
+        :param log_k_max: scalar
             Upper limit of the velocity semi-amplitude [km/s]
 
-        :param t0_min:
+        :param t0_min: scalar
             Lower limit of the time of periapse passage [JD-2.45E6 days]
 
-        :param t0_max:
+        :param t0_max: scalar
             Upper limit of the time of periapse passage [JD-2.45E6 days]
 
-        :param nwalkers:
+        :param nwalkers: int
             Number of walkers
 
-        :param nsteps:
+        :param nsteps: int
             Number of burning-in steps
 
-        :param ncut:
+        :param ncut: int
             Number of steps to ignore in the beginning of the burning-in phase
 
-        :param nthreads:
+        :param nthreads: int
             Number of threads in your machine
 
-        :return:
+        :return: array
             emcee samples that can be used to make a triangle plot using the
             corner routine
         """

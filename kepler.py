@@ -16,17 +16,26 @@ class BinarySystem(object):
     """
     A class that computes the radial velocities given the orbital parameters of
     the binary system.
+
+    :param log_k: scalar
+        Natural logarithm of the radial velocity semi-amplitude K [km/s]
+
+    :param log_period: scalar
+        Natural logarithm of the orbital period [days]
+
+    :param t0: scalar
+        Time of pariastron passage [JD - 2.45E6 days]
+
+    :param w: scalar
+        Argument of periapse [degrees]
+
+    :param log_e: scalar
+        Natural logarithm of the eccentricity
+
+    :param vz: scalar
+        Proper motion of the system [km/s]
     """
     def __init__(self, log_k, log_period, t0, w, log_e, vz):
-        """
-
-        :param log_k:
-        :param log_period:
-        :param t0:
-        :param w:
-        :param log_e:
-        :param vz:
-        """
         self.log_k = log_k
         self.log_period = log_period
         self.t0 = t0
@@ -43,10 +52,10 @@ class BinarySystem(object):
         """
         The radial velocities equation.
 
-        :param f:
+        :param f: scalar or array
             True anomaly [radians]
 
-        :return:
+        :return: scalar or array
             Radial velocities [km/s]
         """
         return self.vz + self.k * (np.cos(self.w_rad + f) + self.e *
@@ -57,13 +66,13 @@ class BinarySystem(object):
         """
         The Kepler equation.
 
-        :param e_ano:
+        :param e_ano: scalar or array
             Eccentric anomaly [radians]
 
-        :param m_ano:
+        :param m_ano: scalar or array
             Mean anomaly [radians]
 
-        :return:
+        :return: scalar or array
             Value of E-e*sin(E)-M
         """
         return e_ano - self.e * np.sin(e_ano) - m_ano
@@ -71,16 +80,16 @@ class BinarySystem(object):
     # Calculates the radial velocities for given orbital parameters
     def get_rvs(self, ts, nt=1000):
         """
-        Computes the radial velocity arrays given the orbital parameters.
+        Computes the radial velocity given the orbital parameters.
 
-        :param ts:
-            Array of times [d]
+        :param ts: scalar or array
+            Time [d]
 
-        :param nt:
+        :param nt: int
             Number of points for one period. Default=1000.
 
-        :return:
-            Array of radial velocities [km/s]
+        :return: scalar or array
+            Radial velocities [km/s]
         """
         # Calculating RVs for one period
         t = np.linspace(self.t0, self.t0 + self.period, nt)       # Time (days)
