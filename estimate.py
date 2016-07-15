@@ -30,14 +30,26 @@ class OrbitalParams(object):
     :param rv_err: array
         Uncertainties of the radial velocities [km/s]
 
+    :param guess: array
+
+
+    :param bounds: tuple
+
+
     :param vz: scalar
         Proper motion [km/s]
     """
-    def __init__(self, t, rv, rv_err, vz):
+    def __init__(self, t, rv, rv_err, vz, guess,
+                 bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
+                         (-4, -4.3E-5)), prior=None, args=None):
         self.t = t
         self.rv = rv
         self.rv_err = rv_err
         self.vz = vz
+        self.guess = guess
+        self.bounds = bounds
+        self.prior = prior
+        self.args = args
 
     # The likelihood function
     def lnlike(self, theta):
@@ -61,21 +73,10 @@ class OrbitalParams(object):
                              np.log(2. * np.pi / inv_sigma2))
 
     # Maximum likelihood estimation of orbital parameters
-    def ml_orbit(self, guess, log_k_interval=2., t0_interval=100., maxiter=200):
+    def ml_orbit(self, maxiter=200):
         """
         This method produces the maximum likelihood estimation of the orbital
         parameters.
-
-        :param guess: array
-            An array containing the first guesses of the parameters
-
-        :param log_k_interval: scalar
-            Interval that sets the upper bound for the scipy.optimize.minimize()
-            function around the values of log10(K) in guess
-
-        :param t0_interval: scalar
-            Interval that sets the bounds for the scipy.optimize.minimize()
-            function around the value of t0 in guess
 
         :param maxiter: int
             Maximum number of iterations on scipy.minimize. Default=200
@@ -87,54 +88,14 @@ class OrbitalParams(object):
         """
         nll = lambda *args: -self.lnlike(*args)
         result = op.minimize(fun=nll,
-                             x0=guess,
+                             x0=self.guess,
                              method='TNC',
-                             bounds=((-4, guess[0] + log_k_interval),
-                                     (-4, 4),
-                                     (guess[2] - t0_interval,
-                                      guess[2] + t0_interval),
-                                     (0, 360),
-                                     (-4, -0.0001)),
+                             bounds=self.bounds,
                              options={'maxiter': maxiter})
         return result["x"]
 
-    # Generating priors for Markov-Chain Monte Carlo estimation
-    @staticmethod
-    def auto_lnprior(theta, log_k_max, t0_min, t0_max):
-        """
-        This method semi-automatically produces flat priors for the orbital
-        parameters. It's not completely automatic because the user still has to
-        provide the upper limit for the velocity semi-amplitude and the lower
-        and upper limits for the time of periapse passage
-
-        :param theta: array
-            Array with shape [1,5] containing the values of the orbital
-            parameters log_k, log_period, t0, w, log_e
-
-        :param log_k_max: scalar
-            Upper limit of the velocity semi-amplitude [km/s]
-
-        :param t0_min: scalar
-            Lower limit of the time of periapse passage [JD-2.45E6 days]
-
-        :param t0_max: scalar
-            Upper limit of the time of periapse passage [JD-2.45E6 days]
-
-        :return: scalar
-            Zero if all parameters are inside the flat prior interval, -inf
-            otherwise
-        """
-        log_k, log_period, t0, w, log_e = theta
-        if -4 < log_k < log_k_max and \
-           0. < log_period < 4 and \
-           t0_min < t0 < t0_max and \
-           0. < w < 360. and \
-           -4 < log_e < -0.0001:
-            return 0.0
-        return -np.inf
-
     # The probability
-    def lnprob(self, theta, log_k_max, t0_min, t0_max):
+    def lnprob(self, theta):
         """
         This function calculates the ln of the probabilities to be used in the
         MCMC esitmation.
@@ -143,41 +104,19 @@ class OrbitalParams(object):
             Array with shape [1,5] containing the values of the orbital
             parameters log_k, log_period, t0, w, log_e
 
-        :param log_k_max: scalar
-            Upper limit of the velocity semi-amplitude [km/s]
-
-        :param t0_min: scalar
-            Lower limit of the time of periapse passage [JD-2.45E6 days]
-
-        :param t0_max: scalar
-            Upper limit of the time of periapse passage [JD-2.45E6 days]
-
         :return: scalar
-            The probability of the signal rv being the result of a model with the
-            parameters theta
+            The probability of the signal rv being the result of a model with
+            the parameters theta
         """
-        lp = self.auto_lnprior(theta, log_k_max, t0_min, t0_max)
+        lp = self.prior(*self.args)
         if not np.isfinite(lp):
             return -np.inf
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, guess, log_k_max=2., t0_min=0., t0_max=7500.,
-                    nwalkers=20, nsteps=1000, ncut=50, nthreads=1):
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, ncut=50, nthreads=1):
         """
         Calculates samples of parameters that best fit the signal rv.
-
-        :param guess: array
-            An array containing the first guesses of the parameters
-
-        :param log_k_max: scalar
-            Upper limit of the velocity semi-amplitude [km/s]
-
-        :param t0_min: scalar
-            Lower limit of the time of periapse passage [JD-2.45E6 days]
-
-        :param t0_max: scalar
-            Upper limit of the time of periapse passage [JD-2.45E6 days]
 
         :param nwalkers: int
             Number of walkers
@@ -196,11 +135,35 @@ class OrbitalParams(object):
             corner routine
         """
         ndim = 5
-        pos = np.array([guess + 1e-3 * np.random.randn(ndim)
+        pos = np.array([self.guess + 1e-3 * np.random.randn(ndim)
                         for i in range(nwalkers)])
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        args=(log_k_max, t0_min, t0_max),
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
         return samples
+
+
+class Priors(object):
+    """
+
+    :param theta:
+    """
+    def __init__(self, theta):
+        self.theta = theta
+
+    # Flat priors
+    def flat(self, bounds):
+        """
+
+        :param bounds: array or list
+        :return:
+        """
+        log_k, log_period, t0, w, log_e = self.theta
+        if bounds[0][0] < log_k < bounds[0][1] and \
+           bounds[1][0] < log_period < bounds[1][1] and \
+           bounds[2][0] < t0 < bounds[2][1] and \
+           bounds[3][0] < w < bounds[3][1] and \
+           bounds[4][0] < log_e < bounds[4][1]:
+            return 0.0
+        return -np.inf
