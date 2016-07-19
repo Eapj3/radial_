@@ -41,15 +41,13 @@ class OrbitalParams(object):
     """
     def __init__(self, t, rv, rv_err, vz, guess,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
-                         (-4, -4.3E-5)), prior=None, args=None):
+                         (-4, -4.3E-5))):
         self.t = t
         self.rv = rv
         self.rv_err = rv_err
         self.vz = vz
         self.guess = guess
         self.bounds = bounds
-        self.prior = prior
-        self.args = args
 
     # The likelihood function
     def lnlike(self, theta):
@@ -94,11 +92,27 @@ class OrbitalParams(object):
                              options={'maxiter': maxiter})
         return result["x"]
 
+    # Flat priors
+    def flat(self, theta):
+        """
+
+        :param theta:
+        :return:
+        """
+        log_k, log_period, t0, w, log_e = theta
+        if self.bounds[0][0] < log_k < self.bounds[0][1] and \
+           self.bounds[1][0] < log_period < self.bounds[1][1] and \
+           self.bounds[2][0] < t0 < self.bounds[2][1] and \
+           self.bounds[3][0] < w < self.bounds[3][1] and \
+           self.bounds[4][0] < log_e < self.bounds[4][1]:
+            return 0.0
+        return -np.inf
+
     # The probability
     def lnprob(self, theta):
         """
         This function calculates the ln of the probabilities to be used in the
-        MCMC esitmation.
+        MCMC estimation.
 
         :param theta: array
             Array with shape [1,5] containing the values of the orbital
@@ -108,7 +122,7 @@ class OrbitalParams(object):
             The probability of the signal rv being the result of a model with
             the parameters theta
         """
-        lp = self.prior(*self.args)
+        lp = self.flat(theta)
         if not np.isfinite(lp):
             return -np.inf
         return lp + self.lnlike(theta)
@@ -135,35 +149,10 @@ class OrbitalParams(object):
             corner routine
         """
         ndim = 5
-        pos = np.array([self.guess + 1e-3 * np.random.randn(ndim)
+        pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
                         for i in range(nwalkers)])
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
         return samples
-
-
-class Priors(object):
-    """
-
-    :param theta:
-    """
-    def __init__(self, theta):
-        self.theta = theta
-
-    # Flat priors
-    def flat(self, bounds):
-        """
-
-        :param bounds: array or list
-        :return:
-        """
-        log_k, log_period, t0, w, log_e = self.theta
-        if bounds[0][0] < log_k < bounds[0][1] and \
-           bounds[1][0] < log_period < bounds[1][1] and \
-           bounds[2][0] < t0 < bounds[2][1] and \
-           bounds[3][0] < w < bounds[3][1] and \
-           bounds[4][0] < log_e < bounds[4][1]:
-            return 0.0
-        return -np.inf
