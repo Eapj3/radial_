@@ -1,6 +1,8 @@
 # Temporarily ignore
 Makefile
 conf.py
+*.csv
+docs/
 
 # Files to be untracked for now
 test.py
