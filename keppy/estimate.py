@@ -3,7 +3,7 @@
 
 import numpy as np
 import scipy.optimize as op
-import kepler
+from keppy import orbit
 import emcee
 
 """
@@ -64,7 +64,7 @@ class OrbitalParams(object):
         """
         nt = len(self.t)
         log_k, log_period, t0, w, log_e = theta
-        system = kepler.BinarySystem(log_k, log_period, t0, w, log_e, self.vz)
+        system = orbit.BinarySystem(log_k, log_period, t0, w, log_e, self.vz)
         model = system.get_rvs(ts=self.t, nt=nt)
         inv_sigma2 = 1. / self.rv_err ** 2
         return -0.5 * np.sum((self.rv - model) ** 2 * inv_sigma2 +
