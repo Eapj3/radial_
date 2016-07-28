@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import numpy as np
 import scipy.optimize as sp
+from astropy import units as u
 
 """
 This module computes the radial velocities of a massive object being orbited by
@@ -17,31 +20,59 @@ class BinarySystem(object):
     A class that computes the radial velocities given the orbital parameters of
     the binary system.
 
-    :param log_k: scalar
+    Parameters
+    ----------
+
+    log_k : scalar
         Natural logarithm of the radial velocity semi-amplitude K [km/s]
 
-    :param log_period: scalar
+    log_period : scalar
         Natural logarithm of the orbital period [days]
 
-    :param t0: scalar
+    t0 : scalar
         Time of pariastron passage [JD - 2.45E6 days]
 
-    :param w: scalar
+    w : scalar
         Argument of periapse [degrees]
 
-    :param log_e: scalar
+    log_e : scalar
         Natural logarithm of the eccentricity
 
-    :param vz: scalar
-        Proper motion of the system [km/s]
+    vz : scalar
+        Proper motion of the barycenter [km/s]
     """
-    def __init__(self, log_k, log_period, t0, w, log_e, vz):
-        self.log_k = log_k
-        self.log_period = log_period
-        self.t0 = t0
-        self.w = w
-        self.log_e = log_e
-        self.vz = vz
+    def __init__(self, log_k, log_period, t0, w, log_e, vz, offset=0.0):
+
+        if isinstance(log_k, float) or isinstance(log_k, int):
+            self.log_k = log_k
+        else:
+            raise TypeError('log_k is not scalar')
+
+        if isinstance(log_period, float) or isinstance(log_period, int):
+            self.log_period = log_period
+        else:
+            raise TypeError('log_period is not scalar')
+
+        if isinstance(t0, float) or isinstance(t0, int):
+            self.t0 = t0
+        else:
+            raise TypeError('t0 is not scalar')
+
+        if isinstance(w, float) or isinstance(w, int):
+            self.w = w
+        else:
+            raise TypeError('w is not scalar')
+
+        if isinstance(log_e, float) or isinstance(log_e, int):
+            self.log_e = log_e
+        else:
+            raise TypeError('log_e is not scalar')
+
+        if isinstance(vz, float) or isinstance(vz, int):
+            self.vz = vz
+        else:
+            raise TypeError('vz is not scalar')
+
         self.w_rad = w * np.pi / 180.
         self.k = 10 ** log_k
         self.period = 10 ** log_period
@@ -52,14 +83,21 @@ class BinarySystem(object):
         """
         The radial velocities equation.
 
-        :param f: scalar or array
+        Parameters
+        ----------
+
+        f : scalar or `numpy.ndarray`
             True anomaly [radians]
 
-        :return: scalar or array
+        Returns
+        -------
+
+        rvs : scalar or array
             Radial velocities [km/s]
         """
-        return self.vz + self.k * (np.cos(self.w_rad + f) + self.e *
-                                   np.cos(self.w_rad))
+        rvs = self.vz + self.k * (np.cos(self.w_rad + f) + self.e *
+                                  np.cos(self.w_rad))
+        return rvs
 
     # Calculates the Kepler equation (Eq. 41)
     def kep_eq(self, e_ano, m_ano):
