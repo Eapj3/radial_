@@ -32,22 +32,57 @@ class OrbitalParams(object):
 
     :param guess: array
 
+    :param bounds_vz: tuple
+        Bounds for the estimation proper motions of the barycenter (vz) for each
+        dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
+        n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
+        to (2,).
 
-    :param bounds: tuple
+    :param bounds: tuple, optional
+        Bounds for the estimation of the orbital parameters, with the exception
+        of the proper motion of the barycenter (vz). It must have numpy.shape
+        equal to (5, 2). Default is ((-4, 4), (-4, 4), (0, 10000), (0, 360),
+        (-4, -4.3E-5)).
 
-
-    :param vz: scalar
-        Proper motion [km/s]
+    :param n_datasets: int, optional
+        Number of datasets to be used for the orbit estimation. Different
+        datasets comprise, e.g., observations from different instruments. This
+        is necessary because different instruments have different offsets in
+        the radial velocities. Default is 1.
     """
-    def __init__(self, t, rv, rv_err, vz, guess,
+    def __init__(self, t, rv, rv_err, guess, bounds_vz,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
-                         (-4, -4.3E-5))):
-        self.t = t
-        self.rv = rv
-        self.rv_err = rv_err
-        self.vz = vz
-        self.guess = guess
-        self.bounds = bounds
+                         (-4, -4.3E-5)), n_datasets=1):
+
+        if isinstance(n_datasets, int) is False:
+            raise TypeError('n_datasets must be int')
+        elif n_datasets < 0:
+            raise ValueError('n_datasets must be greater than zero')
+        else:
+            self.n_datasets = n_datasets
+
+        if self.n_datasets == 1:
+            self.t = t
+            self.rv = rv
+            self.rv_err = rv_err
+            if len(guess) != 5+self.n_datasets:
+                raise ValueError('guess must have a length equal to 5 + '
+                                 'n_datasets')
+            else:
+                self.guess = guess
+            self.bounds_vz = bounds_vz
+            self.bounds = bounds
+        else:
+            self.t = t
+            self.rv = rv
+            self.rv_err = rv_err
+            if len(guess) != 5+self.n_datasets:
+                raise ValueError('guess must have a length equal to 5 + '
+                                 'n_datasets')
+            else:
+                self.guess = guess
+            self.bounds_vz = bounds_vz
+            self.bounds = bounds
 
     # The likelihood function
     def lnlike(self, theta):
@@ -63,8 +98,8 @@ class OrbitalParams(object):
             model with parameters theta
         """
         nt = len(self.t)
-        log_k, log_period, t0, w, log_e = theta
-        system = orbit.BinarySystem(log_k, log_period, t0, w, log_e, self.vz)
+        log_k, log_period, t0, w, log_e, vz = theta
+        system = orbit.BinarySystem(log_k, log_period, t0, w, log_e, vz)
         model = system.get_rvs(ts=self.t, nt=nt)
         inv_sigma2 = 1. / self.rv_err ** 2
         return -0.5 * np.sum((self.rv - model) ** 2 * inv_sigma2 +
@@ -99,12 +134,13 @@ class OrbitalParams(object):
         :param theta:
         :return:
         """
-        log_k, log_period, t0, w, log_e = theta
+        log_k, log_period, t0, w, log_e, vz = theta
         if self.bounds[0][0] < log_k < self.bounds[0][1] and \
            self.bounds[1][0] < log_period < self.bounds[1][1] and \
            self.bounds[2][0] < t0 < self.bounds[2][1] and \
            self.bounds[3][0] < w < self.bounds[3][1] and \
-           self.bounds[4][0] < log_e < self.bounds[4][1]:
+           self.bounds[4][0] < log_e < self.bounds[4][1] and \
+           self.bounds[5][0] < vz < self.bounds[5][1]:
             return 0.0
         return -np.inf
 
