@@ -3,6 +3,7 @@ Makefile
 conf.py
 *.csv
 docs/
+*.dat
 
 # Files to be untracked for now
 test.py
