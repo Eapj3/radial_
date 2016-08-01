@@ -21,13 +21,13 @@ class OrbitalParams(object):
     A class that computes the orbital parameters of a binary system given its
     radial velocities (and their uncertainties) in function of time.
 
-    :param t: array
+    :param t: list of arrays
         Time [JD - 2.4E6 days]
 
-    :param rv: array
+    :param rv: list of arrays
         Radial velocities [km/s]
 
-    :param rv_err: array
+    :param rv_err: list of arrays
         Uncertainties of the radial velocities [km/s]
 
     :param guess: array
@@ -70,8 +70,7 @@ class OrbitalParams(object):
                                  'n_datasets')
             else:
                 self.guess = guess
-            self.bounds_vz = bounds_vz
-            self.bounds = bounds
+            self.bounds = bounds + bounds_vz
         else:
             self.t = t
             self.rv = rv
@@ -81,8 +80,7 @@ class OrbitalParams(object):
                                  'n_datasets')
             else:
                 self.guess = guess
-            self.bounds_vz = bounds_vz
-            self.bounds = bounds
+            self.bounds = bounds + bounds_vz
 
     # The likelihood function
     def lnlike(self, theta):
@@ -91,19 +89,25 @@ class OrbitalParams(object):
         given set of parameters producing the observed data (t, rv +/- rv_err).
 
         :param theta: array
-            Array containing the 5 parameters log_k, log_period, t0, w and log_e
+            Array containing the 5+n_datasets parameters log_k, log_period, t0,
+            w, log_e and the velocity offsets for each dataset
 
         :return: float
             The ln of the likelihood of the signal rv being the result of a
             model with parameters theta
         """
         nt = len(self.t)
-        log_k, log_period, t0, w, log_e, vz = theta
-        system = orbit.BinarySystem(log_k, log_period, t0, w, log_e, vz)
-        model = system.get_rvs(ts=self.t, nt=nt)
-        inv_sigma2 = 1. / self.rv_err ** 2
-        return -0.5 * np.sum((self.rv - model) ** 2 * inv_sigma2 +
-                             np.log(2. * np.pi / inv_sigma2))
+        # log_k, log_period, t0, w, log_e, vz = theta
+        sum_like = 0
+        # Measuring the log-likelihood for each dataset separately
+        for i in range(self.n_datasets):
+            system = orbit.BinarySystem(theta[0], theta[1], theta[2], theta[3],
+                                        theta[4], theta[5 + i])
+            model = system.get_rvs(ts=self.t[i], nt=nt)
+            inv_sigma2 = 1. / self.rv_err[i] ** 2
+            sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
+                               np.log(2. * np.pi / inv_sigma2))
+        return -0.5 * sum_like
 
     # Maximum likelihood estimation of orbital parameters
     def ml_orbit(self, maxiter=200):
@@ -134,13 +138,9 @@ class OrbitalParams(object):
         :param theta:
         :return:
         """
-        log_k, log_period, t0, w, log_e, vz = theta
-        if self.bounds[0][0] < log_k < self.bounds[0][1] and \
-           self.bounds[1][0] < log_period < self.bounds[1][1] and \
-           self.bounds[2][0] < t0 < self.bounds[2][1] and \
-           self.bounds[3][0] < w < self.bounds[3][1] and \
-           self.bounds[4][0] < log_e < self.bounds[4][1] and \
-           self.bounds[5][0] < vz < self.bounds[5][1]:
+        tests = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
+                 for i in range(len(theta))]
+        if all(tests) is True:
             return 0.0
         return -np.inf
 
