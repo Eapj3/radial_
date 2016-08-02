@@ -184,7 +184,7 @@ class OrbitalParams(object):
             emcee samples that can be used to make a triangle plot using the
             corner routine
         """
-        ndim = 5
+        ndim = 5 + self.n_datasets
         pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
                         for i in range(nwalkers)])
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
