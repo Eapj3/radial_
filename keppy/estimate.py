@@ -49,10 +49,14 @@ class OrbitalParams(object):
         datasets comprise, e.g., observations from different instruments. This
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
+
+    :param dbglvl: int, optional
+        Debug level. If higher than zero, than the code prints a series of
+        diagnostics. Default is 0.
     """
     def __init__(self, t, rv, rv_err, guess, bounds_vz,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
-                         (-4, -4.3E-5)), n_datasets=1):
+                         (-4, -4.3E-5)), n_datasets=1, dbglvl=0):
 
         if isinstance(n_datasets, int) is False:
             raise TypeError('n_datasets must be int')
@@ -70,7 +74,7 @@ class OrbitalParams(object):
                                  'n_datasets')
             else:
                 self.guess = guess
-            self.bounds = bounds + bounds_vz
+            self.bounds = bounds + (bounds_vz,)
         else:
             self.t = t
             self.rv = rv
@@ -81,6 +85,25 @@ class OrbitalParams(object):
             else:
                 self.guess = guess
             self.bounds = bounds + bounds_vz
+
+        if isinstance(dbglvl, int):
+            self.dbglvl = dbglvl
+        else:
+            raise TypeError('dbglvl must be int')
+
+        # Debugging ############################################################
+        if self.dbglvl > 0:
+            print('\nThe guesses array (len = %i):' % len(self.guess))
+            print(self.guess)
+            print('\nThe search bounds:')
+            print("log K = " + repr(self.bounds[0]))
+            print("log T = " + repr(self.bounds[1]))
+            print("t0 = " + repr(self.bounds[2]))
+            print("w = " + repr(self.bounds[3]))
+            print("log e = " + repr(self.bounds[4]))
+            for i in range(self.n_datasets):
+                print('vz[%i] = ' % i + repr(self.bounds[5+i]))
+        ########################################################################
 
     # The likelihood function
     def lnlike(self, theta):
@@ -129,6 +152,14 @@ class OrbitalParams(object):
                              method='TNC',
                              bounds=self.bounds,
                              options={'maxiter': maxiter})
+
+        # Debugging ############################################################
+        if self.dbglvl > 0:
+            print('\nMinimization successful = %s' % result["success"])
+            print('Cause of termination = %s' % result["message"])
+            print('Number of iterations = %i' % result["nit"])
+        ########################################################################
+
         return result["x"]
 
     # Flat priors
@@ -192,3 +223,67 @@ class OrbitalParams(object):
         sampler.run_mcmc(pos, nsteps)
         samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
         return samples
+
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import time
+
+    # The "true" parameters
+    k_true = 58.1E-3
+    period_true = 2.98565
+    t0_true = 1497.5
+    w_true = 11.
+    e_true = 0.013
+
+    # Proper motion and number of points to compute a period of RVs
+    vz = 29.027
+    nt = 1000
+
+    ts = np.linspace(1494., 1500., 100)
+    print('\nCreating mock data of radial velocities of HD83443 b.')
+    HD83443 = orbit.BinarySystem(log_k=np.log10(k_true),
+                                 log_period=np.log10(period_true),
+                                 t0=t0_true,
+                                 w=w_true,
+                                 log_e=np.log10(e_true),
+                                 vz=vz)
+    rvs = HD83443.get_rvs(ts=ts, nt=nt)
+
+    # "Observing" the data
+    rv_d = np.array(
+        [rvk + np.random.normal(loc=0., scale=0.015) for rvk in rvs])
+    t_d = np.array([tk + np.random.normal(loc=0., scale=0.1) for tk in ts])
+    rv_derr = np.array([0.015 + np.random.normal(loc=0.0, scale=0.005)
+                        for k in rvs])
+
+    print('\nPlotting the mock data.')
+    # Plotting
+    plt.errorbar(t_d, rv_d, fmt='.', yerr=rv_derr, label="HD83443 b")
+    plt.plot(ts, rvs, label="True orbit")
+    plt.xlabel('JD - 2450000.0 (days)')
+    plt.ylabel('RV (km/s)')
+    plt.legend(numpoints=1)
+    plt.show()
+
+    # We use the true values as the initial guess for the orbital parameters
+    guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
+             np.log10(e_true), vz]
+    print('\nStarting maximum likelihood estimation.')
+    start_time = time.time()
+
+    # We instantiate the class OrbitalParams with our data
+    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=guess, bounds_vz=(25, 30),
+                          dbglvl=1)
+
+    # And run the estimation
+    params_ml = estim.ml_orbit()
+    print('Orbital parameters estimation took %.4f seconds' %
+          (time.time() - start_time))
+    print('\nResults:')
+    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
+          (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
+           params_ml[3], 10 ** params_ml[4], params_ml[5]))
+    print('\n"True" values:')
+    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
+          (k_true, period_true, t0_true, w_true, e_true, vz))

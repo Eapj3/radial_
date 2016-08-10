@@ -41,7 +41,7 @@ class BinarySystem(object):
     vz : scalar
         Proper motion of the barycenter [km/s]
     """
-    def __init__(self, log_k, log_period, t0, w, log_e, vz, debug=False):
+    def __init__(self, log_k, log_period, t0, w, log_e, vz, dbglvl=0):
 
         if isinstance(log_k, float) or isinstance(log_k, int):
             self.log_k = log_k
@@ -73,10 +73,10 @@ class BinarySystem(object):
         else:
             raise TypeError('vz is not scalar')
 
-        if isinstance(debug, bool):
-            self.debug_flag = debug
+        if isinstance(dbglvl, int):
+            self.dbglvl = dbglvl
         else:
-            raise TypeError('debug must be boolean')
+            raise TypeError('dbglvl must be int')
 
         self.w_rad = w * np.pi / 180.
         self.k = 10 ** log_k
@@ -148,7 +148,7 @@ class BinarySystem(object):
         # Why do we compute the true anomaly in this weird way? Because
         # arc-cosine is degenerate in the interval 0-360 degrees.
 
-        if self.debug_flag is True:
+        if self.dbglvl > 0:
             print('Median of mean anomalies = %.3f' % (np.median(m_ano)))
             print('Median of eccentric anomalies = %.3f' % (np.median(e_ano)))
             print('Median of true anomalies = %.3f' % (np.median(f)))
@@ -177,9 +177,9 @@ if __name__ == '__main__':
                              log_period=np.log10(359.51),
                              t0=3998.1,
                              w=52.2,
-                             log_e=np.log10(1.847),
+                             log_e=np.log10(0.847),
                              vz=-68.54,
-                             debug=True)
+                             dbglvl=1)
 
     # The RVs are computed simply by running get_rvs()
     _rvs = HIP156846.get_rvs(nt=1000, ts=t_sim)
