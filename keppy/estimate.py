@@ -261,15 +261,6 @@ if __name__ == '__main__':
     rv_derr = np.array([0.015 + np.random.normal(loc=0.0, scale=0.005)
                         for k in rvs])
 
-    print('\nPlotting the mock data.')
-    # Plotting
-    plt.errorbar(t_d, rv_d, fmt='.', yerr=rv_derr, label="HD83443 b")
-    plt.plot(ts, rvs, label="True orbit")
-    plt.xlabel('JD - 2450000.0 (days)')
-    plt.ylabel('RV (km/s)')
-    plt.legend(numpoints=1)
-    plt.show()
-
     # We use the true values as the initial guess for the orbital parameters
     _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
               np.log10(e_true), vz]
@@ -283,7 +274,7 @@ if __name__ == '__main__':
 
     # And run the estimation
     params_ml = estim.ml_orbit()
-    print('Orbital parameters estimation took %.4f seconds' %
+    print('Orbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     print('\nResults:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
@@ -292,19 +283,20 @@ if __name__ == '__main__':
     print('\n"True" values:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
           (k_true, period_true, t0_true, w_true, e_true, vz))
-    print('\nFinished testing maximum likelihood estimation')
+    print('\nFinished testing maximum likelihood estimation.')
     print('---------------------------------------------------------------')
     print('Starting emcee estimation. It can take a few minutes.')
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=params_ml,
                           bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
-                                  (-3, -1)), bounds_vz=(25, 30), dbglvl=1)
+                                  (-3, -1)), bounds_vz=(0, 50), dbglvl=1)
     start_time = time.time()
     _samples = estim.emcee_orbit(nwalkers=20,
                                  nsteps=1000,
                                  nthreads=4)
-    print('\nOrbital parameters estimation took %.4f seconds' %
+    print('\nOrbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     # corner is used to make these funky triangle plots
+    print('Now creating the corner plot.')
     corner.corner(_samples,
                   labels=[r'$\ln{K}$', r'$\ln{T}$', r'$t_0$', r'$\omega$',
                           r'$\ln{e}$', r'$v_Z$'],
