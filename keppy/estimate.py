@@ -158,6 +158,7 @@ class OrbitalParams(object):
             print('\nMinimization successful = %s' % result["success"])
             print('Cause of termination = %s' % result["message"])
             print('Number of iterations = %i' % result["nit"])
+        # TODO: measure the residuals, not trivial if more than one dataset.
         ########################################################################
 
         return result["x"]
@@ -218,6 +219,7 @@ class OrbitalParams(object):
         ndim = 5 + self.n_datasets
         pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
                         for i in range(nwalkers)])
+
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
@@ -225,9 +227,11 @@ class OrbitalParams(object):
         return samples
 
 
+# The following is used for testing when estimate.py is run by itself
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import time
+    import corner
 
     # The "true" parameters
     k_true = 58.1E-3
@@ -267,13 +271,14 @@ if __name__ == '__main__':
     plt.show()
 
     # We use the true values as the initial guess for the orbital parameters
-    guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
-             np.log10(e_true), vz]
-    print('\nStarting maximum likelihood estimation.')
+    _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
+              np.log10(e_true), vz]
+    print('\n-------------------------------------------------------------')
+    print('Starting maximum likelihood estimation.')
     start_time = time.time()
 
     # We instantiate the class OrbitalParams with our data
-    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=guess, bounds_vz=(25, 30),
+    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, bounds_vz=(25, 30),
                           dbglvl=1)
 
     # And run the estimation
@@ -287,3 +292,43 @@ if __name__ == '__main__':
     print('\n"True" values:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
           (k_true, period_true, t0_true, w_true, e_true, vz))
+    print('\nFinished testing maximum likelihood estimation')
+    print('---------------------------------------------------------------')
+    print('Starting emcee estimation. It can take a few minutes.')
+    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=params_ml,
+                          bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
+                                  (-3, -1)), bounds_vz=(25, 30), dbglvl=1)
+    start_time = time.time()
+    _samples = estim.emcee_orbit(nwalkers=20,
+                                 nsteps=1000,
+                                 nthreads=4)
+    print('\nOrbital parameters estimation took %.4f seconds' %
+          (time.time() - start_time))
+    # corner is used to make these funky triangle plots
+    corner.corner(_samples,
+                  labels=[r'$\ln{K}$', r'$\ln{T}$', r'$t_0$', r'$\omega$',
+                          r'$\ln{e}$', r'$v_Z$'],
+                  truths=[np.log10(k_true), np.log10(period_true), t0_true,
+                          w_true, np.log10(e_true), vz])
+    plt.show()
+
+    # log to linear for some parameters
+    _samples[:, 0] = 10 ** _samples[:, 0]
+    _samples[:, 1] = 10 ** _samples[:, 1]
+    _samples[:, 4] = 10 ** _samples[:, 4]
+
+    # Printing results
+    k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz_mcmc = map(
+        lambda v: np.array([v[1], v[2] - v[1], v[1] - v[0]]),
+        zip(*np.percentile(_samples, [16, 50, 84], axis=0)))
+
+    print('\nResults:')
+    print('K = %.3f + (+ %.3f, -%.3f)' % (k_mcmc[0], k_mcmc[1], k_mcmc[2]))
+    print('T = %.2f + (+ %.2f, -%.2f)' % (period_mcmc[0], period_mcmc[1],
+                                          period_mcmc[2]))
+    print('t0 = %.1f + (+ %.1f, -%.1f)' % (t0_mcmc[0], t0_mcmc[1], t0_mcmc[2]))
+    print('w = %.1f + (+ %.1f, -%.1f)' % (w_mcmc[0], w_mcmc[1], w_mcmc[2]))
+    print('e = %.3f + (+ %.3f, -%.3f)' % (e_mcmc[0], e_mcmc[1], e_mcmc[2]))
+    print('vz = %.3f + (+ %.3f, -%.3f)' % (vz_mcmc[0], vz_mcmc[1], vz_mcmc[2]))
+    print('\nFinished testing emcee estimation')
+    print('---------------------------------------------------------------')
