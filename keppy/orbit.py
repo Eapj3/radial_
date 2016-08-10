@@ -41,7 +41,7 @@ class BinarySystem(object):
     vz : scalar
         Proper motion of the barycenter [km/s]
     """
-    def __init__(self, log_k, log_period, t0, w, log_e, vz, offset=0.0):
+    def __init__(self, log_k, log_period, t0, w, log_e, vz, debug=False):
 
         if isinstance(log_k, float) or isinstance(log_k, int):
             self.log_k = log_k
@@ -73,10 +73,18 @@ class BinarySystem(object):
         else:
             raise TypeError('vz is not scalar')
 
+        if isinstance(debug, bool):
+            self.debug_flag = debug
+        else:
+            raise TypeError('debug must be boolean')
+
         self.w_rad = w * np.pi / 180.
         self.k = 10 ** log_k
         self.period = 10 ** log_period
         self.e = 10 ** log_e
+
+        if self.e > 0.9999:
+            raise ValueError('Keplerian orbits are ellipses, therefore e <= 1')
 
     # Calculates Eq. 65
     def vr(self, f):
@@ -92,7 +100,7 @@ class BinarySystem(object):
         Returns
         -------
 
-        rvs : scalar or array
+        _rvs : scalar or array
             Radial velocities [km/s]
         """
         rvs = self.vz + self.k * (np.cos(self.w_rad + f) + self.e *
@@ -139,7 +147,46 @@ class BinarySystem(object):
                            np.sqrt(1. - self.e) * np.cos(e_ano / 2))
         # Why do we compute the true anomaly in this weird way? Because
         # arc-cosine is degenerate in the interval 0-360 degrees.
+
+        if self.debug_flag is True:
+            print('Median of mean anomalies = %.3f' % (np.median(m_ano)))
+            print('Median of eccentric anomalies = %.3f' % (np.median(e_ano)))
+            print('Median of true anomalies = %.3f' % (np.median(f)))
+            print('Std deviation of mean anomalies = %.3f' % (np.std(m_ano)))
+            print('Std deviation of eccentric anomalies = %.3f' %
+                  (np.std(e_ano)))
+            print('Std deviation of true anomalies = %.3f\n' % (np.std(f)))
+
         rv = np.array([self.vr(fk) for fk in f])      # RVs (km/s)
         # Calculating RVs in the specified time interval
         rvs = np.interp(ts, t, rv, period=self.period)
         return rvs
+
+
+if __name__ == '__main__':
+    import time
+    import matplotlib.pyplot as plt
+
+    print('---------------------------------------')
+    print('Starting test of keppy.orbit\n')
+    t_sim = np.linspace(3600., 4200., 1000)  # The time window [JD-2.45E6 days]
+    start_time = time.time()  # We use this to measure the computation time
+
+    # First, we create an instance of the system HIP156846
+    HIP156846 = BinarySystem(log_k=np.log10(0.464),
+                             log_period=np.log10(359.51),
+                             t0=3998.1,
+                             w=52.2,
+                             log_e=np.log10(1.847),
+                             vz=-68.54,
+                             debug=True)
+
+    # The RVs are computed simply by running get_rvs()
+    _rvs = HIP156846.get_rvs(nt=1000, ts=t_sim)
+    print('RV calculation took %.4f seconds' % (time.time() - start_time))
+
+    # Plotting results
+    plt.plot(t_sim, _rvs)
+    plt.xlabel('JD - 2450000.0 (days)')
+    plt.ylabel('RV (km/s)')
+    plt.show()
