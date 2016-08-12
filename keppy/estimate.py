@@ -103,6 +103,10 @@ class OrbitalParams(object):
             print("log e = " + repr(self.bounds[4]))
             for i in range(self.n_datasets):
                 print('vz[%i] = ' % i + repr(self.bounds[5+i]))
+            print('\nThe mean radial velocities for each dataset:')
+            for i in range(self.n_datasets):
+                mean_rv = np.mean(self.rv[i])
+                print('mean(rvs)_dset[%i] = %.3f' % (i, mean_rv))
         ########################################################################
 
     # The likelihood function
@@ -217,7 +221,7 @@ class OrbitalParams(object):
             corner routine
         """
         ndim = 5 + self.n_datasets
-        pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
+        pos = np.array([self.guess + 1e-2 * np.random.randn(ndim)
                         for i in range(nwalkers)])
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
@@ -240,18 +244,20 @@ if __name__ == '__main__':
     w_true = 11.
     e_true = 0.013
 
-    # Proper motion and number of points to compute a period of RVs
-    vz = 29.027
+    # Proper motions for different datasets and number of points to compute a
+    # period of RVs
+    vz = [29.027, 35.000]
     nt = 1000
+    npoints = 100
 
-    ts = np.linspace(1494., 1500., 100)
+    ts = np.linspace(1494., 1500., npoints)
     print('\nCreating mock data of radial velocities of HD83443 b.')
     HD83443 = orbit.BinarySystem(log_k=np.log10(k_true),
                                  log_period=np.log10(period_true),
                                  t0=t0_true,
                                  w=w_true,
                                  log_e=np.log10(e_true),
-                                 vz=vz)
+                                 vz=0.0)
     rvs = HD83443.get_rvs(ts=ts, nt=nt)
 
     # "Observing" the data
@@ -261,15 +267,29 @@ if __name__ == '__main__':
     rv_derr = np.array([0.015 + np.random.normal(loc=0.0, scale=0.005)
                         for k in rvs])
 
+    # Breaking the RV data in the middle in order to simulate different datasets
+    new_rv_d = np.array([[rvk for rvk in rv_d[:npoints//2]]
+                         for rvk in rv_d[npoints//2:]])
+    new_t_d = np.array([[tk for tk in t_d[:npoints//2]]
+                        for tk in t_d[npoints//2:]])
+    new_rv_d[0] += vz[0]
+    new_rv_d[1] += vz[1]
+    rv_d = new_rv_d
+    t_d = new_t_d
+    rv_m = [np.mean(rv_d[0]), np.mean(rv_d[1])]
+    print('Mean of RVs = %.3f, %.3f' % (rv_m[0], rv_m[1]))
+
     # We use the true values as the initial guess for the orbital parameters
     _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
-              np.log10(e_true), vz]
+              np.log10(e_true), vz[0], vz[1]]
+
     print('\n-------------------------------------------------------------')
     print('Starting maximum likelihood estimation.')
     start_time = time.time()
 
     # We instantiate the class OrbitalParams with our data
-    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, bounds_vz=(25, 30),
+    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess,
+                          bounds_vz=((25, 30), (30, 40)), n_datasets=2,
                           dbglvl=1)
 
     # And run the estimation
@@ -277,18 +297,22 @@ if __name__ == '__main__':
     print('Orbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     print('\nResults:')
-    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
-          (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
-           params_ml[3], 10 ** params_ml[4], params_ml[5]))
+    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
+          'vz1 = %.3f' % (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
+                          params_ml[3], 10 ** params_ml[4], params_ml[5],
+                          params_ml[6]))
     print('\n"True" values:')
-    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz = %.3f' %
-          (k_true, period_true, t0_true, w_true, e_true, vz))
+    print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
+          'vz1 = %.3f' % (k_true, period_true, t0_true, w_true, e_true,
+                          vz[0], vz[1]))
     print('\nFinished testing maximum likelihood estimation.')
     print('---------------------------------------------------------------')
+    """
     print('Starting emcee estimation. It can take a few minutes.')
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=params_ml,
                           bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
-                                  (-3, -1)), bounds_vz=(0, 50), dbglvl=1)
+                                  (-3, -1)),
+                          bounds_vz=(25, 30), dbglvl=1)
     start_time = time.time()
     _samples = estim.emcee_orbit(nwalkers=20,
                                  nsteps=1000,
@@ -324,3 +348,4 @@ if __name__ == '__main__':
     print('vz = %.3f + (+ %.3f, -%.3f)' % (vz_mcmc[0], vz_mcmc[1], vz_mcmc[2]))
     print('\nFinished testing emcee estimation')
     print('---------------------------------------------------------------')
+    """
