@@ -31,8 +31,10 @@ class OrbitalParams(object):
         Uncertainties of the radial velocities [km/s]
 
     :param guess: array
+        First guess of the orbital parameters in the following order: log10(K),
+        log10(T), t0, w and log10(e).
 
-    :param bounds_vz: tuple
+    :param bounds_vz: tuple, optional
         Bounds for the estimation proper motions of the barycenter (vz) for each
         dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
@@ -49,14 +51,10 @@ class OrbitalParams(object):
         datasets comprise, e.g., observations from different instruments. This
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
-
-    :param dbglvl: int, optional
-        Debug level. If higher than zero, than the code prints a series of
-        diagnostics. Default is 0.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz,
+    def __init__(self, t, rv, rv_err, guess, bounds_vz=((-10, 10), (-10, 10)),
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
-                         (-4, -4.3E-5)), n_datasets=1, dbglvl=0):
+                         (-4, -4.3E-5)), n_datasets=1):
 
         if isinstance(n_datasets, int) is False:
             raise TypeError('n_datasets must be int')
@@ -86,30 +84,8 @@ class OrbitalParams(object):
                 self.guess = guess
             self.bounds = bounds + bounds_vz
 
-        if isinstance(dbglvl, int):
-            self.dbglvl = dbglvl
-        else:
-            raise TypeError('dbglvl must be int')
-
-        # Debugging ############################################################
-        if self.dbglvl > 0:
-            print('\nThe guesses array (len = %i):' % len(self.guess))
-            print(self.guess)
-            print('\nThe search bounds:')
-            print("log K = " + repr(self.bounds[0]))
-            print("log T = " + repr(self.bounds[1]))
-            print("t0 = " + repr(self.bounds[2]))
-            print("w = " + repr(self.bounds[3]))
-            print("log e = " + repr(self.bounds[4]))
-            for i in range(self.n_datasets):
-                print('vz[%i] = ' % i + repr(self.bounds[5+i]))
-            print('\nThe mean radial velocities for each dataset:')
-            for i in range(self.n_datasets):
-                mean_rv = np.mean(self.rv[i])
-                print('mean(rvs)_dset[%i] = %.3f' % (i, mean_rv))
-        ########################################################################
-
     # The likelihood function
+    # noinspection PyTypeChecker
     def lnlike(self, theta):
         """
         This method produces the ln of the Gaussian likelihood function of a
@@ -119,22 +95,24 @@ class OrbitalParams(object):
             Array containing the 5+n_datasets parameters log_k, log_period, t0,
             w, log_e and the velocity offsets for each dataset
 
-        :return: float
+        :return sum_like: float
             The ln of the likelihood of the signal rv being the result of a
             model with parameters theta
         """
-        nt = len(self.t)
         # log_k, log_period, t0, w, log_e, vz = theta
         sum_like = 0
         # Measuring the log-likelihood for each dataset separately
         for i in range(self.n_datasets):
-            system = orbit.BinarySystem(theta[0], theta[1], theta[2], theta[3],
-                                        theta[4], theta[5 + i])
+            nt = len(self.t[i])
+            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
+                                        t0=theta[2], w=theta[3], log_e=theta[4],
+                                        vz=theta[5 + i])
             model = system.get_rvs(ts=self.t[i], nt=nt)
             inv_sigma2 = 1. / self.rv_err[i] ** 2
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
-        return -0.5 * sum_like
+            sum_like *= -0.5
+        return sum_like
 
     # Maximum likelihood estimation of orbital parameters
     def ml_orbit(self, maxiter=200):
@@ -155,30 +133,28 @@ class OrbitalParams(object):
                              x0=self.guess,
                              method='TNC',
                              bounds=self.bounds,
-                             options={'maxiter': maxiter})
-
-        # Debugging ############################################################
-        if self.dbglvl > 0:
-            print('\nMinimization successful = %s' % result["success"])
-            print('Cause of termination = %s' % result["message"])
-            print('Number of iterations = %i' % result["nit"])
-        # TODO: measure the residuals, not trivial if more than one dataset.
-        ########################################################################
-
+                             options={'maxiter': maxiter, "disp": True})
         return result["x"]
 
     # Flat priors
     def flat(self, theta):
         """
+        Computes a flat prior probability for a given set of parameters theta.
 
-        :param theta:
-        :return:
+        :param theta: array
+            Array containing the 5+n_datasets parameters log_k, log_period, t0,
+            w, log_e and the velocity offsets for each dataset
+
+        :return prob:
+            The prior probability for a given set of orbital parameters.
         """
-        tests = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
-                 for i in range(len(theta))]
-        if all(tests) is True:
-            return 0.0
-        return -np.inf
+        params = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
+                  for i in range(len(theta))]
+        if all(params) is True:
+            prob = 0.0
+        else:
+            prob = -np.inf
+        return prob
 
     # The probability
     def lnprob(self, theta):
@@ -227,8 +203,33 @@ class OrbitalParams(object):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
-        samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
-        return samples
+
+        fig, axes = plt.subplots(nrows=3, ncols=2, sharex=True, figsize=(6, 6))
+        axes[0, 0].plot(sampler.chain[:, :, 0].T)
+        #axes[0].axhline(y=np.log10(k_true), linewidth=3, color='orange')
+        axes[0, 0].set_ylabel(r'$K$')
+        axes[1, 0].plot(sampler.chain[:, :, 1].T)
+        #axes[1].axhline(y=np.log10(period_true), linewidth=3,
+        #                color='orange')
+        axes[1, 0].set_ylabel(r'$T$')
+        axes[2, 0].plot(sampler.chain[:, :, 2].T)
+        #axes[2].axhline(y=t0_true, linewidth=3, color='orange')
+        axes[2, 0].set_ylabel(r'$t_0$')
+        axes[0, 1].plot(sampler.chain[:, :, 3].T)
+        # axes[3].axhline(y=w_true, linewidth=3, color='orange')
+        axes[0, 1].set_ylabel(r'$w$')
+        axes[1, 1].plot(sampler.chain[:, :, 4].T)
+        # axes[4].axhline(y=np.log10(e_true), linewidth=3, color='orange')
+        axes[1, 1].set_ylabel(r'$e$')
+        axes[2, 1].plot(sampler.chain[:, :, 5].T)
+        # axes[5].axhline(y=vz, linewidth=3, color='orange')
+        axes[2, 1].set_ylabel(r'$V_Z$')
+        plt.xlabel('step number')
+        plt.show()
+
+        samples = sampler.chain[:, :, :].reshape((-1, ndim))
+        print(self.lnprob(samples[-1]))
+        return samples, sampler
 
 
 # The following is used for testing when estimate.py is run by itself
@@ -242,11 +243,11 @@ if __name__ == '__main__':
     period_true = 2.98565
     t0_true = 1497.5
     w_true = 11.
-    e_true = 0.013
+    e_true = 0.213
 
     # Proper motions for different datasets and number of points to compute a
     # period of RVs
-    vz = [29.027, 35.000]
+    vz = [29.027, 35.0]
     nt = 1000
     npoints = 100
 
@@ -256,8 +257,7 @@ if __name__ == '__main__':
                                  log_period=np.log10(period_true),
                                  t0=t0_true,
                                  w=w_true,
-                                 log_e=np.log10(e_true),
-                                 vz=0.0)
+                                 log_e=np.log10(e_true))
     rvs = HD83443.get_rvs(ts=ts, nt=nt)
 
     # "Observing" the data
@@ -268,10 +268,9 @@ if __name__ == '__main__':
                         for k in rvs])
 
     # Breaking the RV data in the middle in order to simulate different datasets
-    new_rv_d = np.array([[rvk for rvk in rv_d[:npoints//2]]
-                         for rvk in rv_d[npoints//2:]])
-    new_t_d = np.array([[tk for tk in t_d[:npoints//2]]
-                        for tk in t_d[npoints//2:]])
+    new_rv_d = np.array([rv_d[:npoints//2].tolist(),
+                         rv_d[npoints//2:].tolist()])
+    new_t_d = np.array([t_d[:npoints//2].tolist(), t_d[npoints//2:].tolist()])
     new_rv_d[0] += vz[0]
     new_rv_d[1] += vz[1]
     rv_d = new_rv_d
@@ -279,9 +278,13 @@ if __name__ == '__main__':
     rv_m = [np.mean(rv_d[0]), np.mean(rv_d[1])]
     print('Mean of RVs = %.3f, %.3f' % (rv_m[0], rv_m[1]))
 
+    # Subtracting the mean of each RV dataset
+    for i in range(len(rv_d)):
+        rv_d[i] -= rv_m[i]
+
     # We use the true values as the initial guess for the orbital parameters
     _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
-              np.log10(e_true), vz[0], vz[1]]
+              np.log10(e_true), 0.0, 0.0]
 
     print('\n-------------------------------------------------------------')
     print('Starting maximum likelihood estimation.')
@@ -289,8 +292,10 @@ if __name__ == '__main__':
 
     # We instantiate the class OrbitalParams with our data
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess,
-                          bounds_vz=((25, 30), (30, 40)), n_datasets=2,
-                          dbglvl=1)
+                          bounds=((-2, -1), (0.4, 0.5), (1490, 1510), (5, 20),
+                                  (-0.7, -0.6)),
+                          bounds_vz=((-1, 1), (-1, 1)),
+                          n_datasets=2)
 
     # And run the estimation
     params_ml = estim.ml_orbit()
@@ -298,40 +303,76 @@ if __name__ == '__main__':
           (time.time() - start_time))
     print('\nResults:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
-          'vz1 = %.3f' % (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
-                          params_ml[3], 10 ** params_ml[4], params_ml[5],
-                          params_ml[6]))
+          'vz1 = %.3f' %
+          (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
+           params_ml[3], 10 ** params_ml[4], params_ml[5], params_ml[6]))
     print('\n"True" values:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
-          'vz1 = %.3f' % (k_true, period_true, t0_true, w_true, e_true,
-                          vz[0], vz[1]))
+          'vz1 = %.3f' %
+          (k_true, period_true, t0_true, w_true, e_true, vz[0]-rv_m[0],
+           vz[1]-rv_m[1]))
+
+    # Plotting the results
+    est = orbit.BinarySystem(log_k=params_ml[0],
+                             log_period=params_ml[1],
+                             t0=params_ml[2],
+                             w=params_ml[3],
+                             log_e=params_ml[4])
+    rvs = est.get_rvs(ts=ts, nt=nt)
+    for i in range(2):
+        plt.errorbar(t_d[i], rv_d[i]-params_ml[5+i], yerr=rv_derr[i], fmt='.')
+    plt.plot(ts, rvs)
+    plt.show()
     print('\nFinished testing maximum likelihood estimation.')
     print('---------------------------------------------------------------')
     """
     print('Starting emcee estimation. It can take a few minutes.')
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=params_ml,
-                          bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
-                                  (-3, -1)),
+                          #bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
+                          #        (-3, -1)),
                           bounds_vz=(25, 30), dbglvl=1)
     start_time = time.time()
-    _samples = estim.emcee_orbit(nwalkers=20,
+    _samples, sampler = estim.emcee_orbit(nwalkers=20,
+                                 ncut=100,
                                  nsteps=1000,
                                  nthreads=4)
     print('\nOrbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     # corner is used to make these funky triangle plots
     print('Now creating the corner plot.')
-    corner.corner(_samples,
-                  labels=[r'$\ln{K}$', r'$\ln{T}$', r'$t_0$', r'$\omega$',
-                          r'$\ln{e}$', r'$v_Z$'],
-                  truths=[np.log10(k_true), np.log10(period_true), t0_true,
-                          w_true, np.log10(e_true), vz])
-    plt.show()
+    #corner.corner(_samples,
+    #              labels=[r'$\ln{K}$', r'$\ln{T}$', r'$t_0$', r'$\omega$',
+    #                      r'$\ln{e}$', r'$v_Z$'],
+    #              truths=[np.log10(k_true), np.log10(period_true), t0_true,
+    #                      w_true, np.log10(e_true), vz])
+    #plt.show()
 
     # log to linear for some parameters
     _samples[:, 0] = 10 ** _samples[:, 0]
     _samples[:, 1] = 10 ** _samples[:, 1]
     _samples[:, 4] = 10 ** _samples[:, 4]
+
+    #fig, axes = plt.subplots(3, sharex=True, figsize=(6, 6))
+    #axes[0].plot(sampler.chain[:, :, 0].T)
+    #axes[0].axhline(y=np.log10(k_true), linewidth=3, color='orange')
+    #axes[0].set_ylabel(r'$K$')
+    #axes[1].plot(sampler.chain[:, :, 1].T)
+    #axes[1].axhline(y=np.log10(period_true), linewidth=3, color='orange')
+    #axes[1].set_ylabel(r'$T$')
+    #axes[2].plot(sampler.chain[:, :, 2].T)
+    #axes[2].axhline(y=t0_true, linewidth=3, color='orange')
+    #axes[2].set_ylabel(r'$t_0$')
+    #axes[3].plot(sampler.chain[:, :, 3].T)
+    #axes[3].axhline(y=w_true, linewidth=3, color='orange')
+    #axes[3].set_ylabel(r'$w$')
+    #axes[4].plot(sampler.chain[:, :, 4].T)
+    #axes[4].axhline(y=np.log10(e_true), linewidth=3, color='orange')
+    #axes[4].set_ylabel(r'$e$')
+    #axes[5].plot(sampler.chain[:, :, 5].T)
+    #axes[5].axhline(y=vz, linewidth=3, color='orange')
+    #axes[5].set_ylabel(r'$V_Z$')
+    #plt.xlabel('step number')
+    #plt.show()
 
     # Printing results
     k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz_mcmc = map(
@@ -347,5 +388,4 @@ if __name__ == '__main__':
     print('e = %.3f + (+ %.3f, -%.3f)' % (e_mcmc[0], e_mcmc[1], e_mcmc[2]))
     print('vz = %.3f + (+ %.3f, -%.3f)' % (vz_mcmc[0], vz_mcmc[1], vz_mcmc[2]))
     print('\nFinished testing emcee estimation')
-    print('---------------------------------------------------------------')
-    """
+    print('---------------------------------------------------------------')"""

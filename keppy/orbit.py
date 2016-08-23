@@ -41,7 +41,7 @@ class BinarySystem(object):
     vz : scalar
         Proper motion of the barycenter [km/s]
     """
-    def __init__(self, log_k, log_period, t0, w, log_e, vz, dbglvl=0):
+    def __init__(self, log_k, log_period, t0, w, log_e, vz=0.0, dbglvl=0):
 
         if isinstance(log_k, float) or isinstance(log_k, int):
             self.log_k = log_k
