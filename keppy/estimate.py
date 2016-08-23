@@ -52,7 +52,7 @@ class OrbitalParams(object):
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz=((-10, 10), (-10, 10)),
+    def __init__(self, t, rv, rv_err, guess, bounds_vz=((-1, 1), (-1, 1)),
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
                          (-4, -4.3E-5)), n_datasets=1):
 
@@ -115,13 +115,16 @@ class OrbitalParams(object):
         return sum_like
 
     # Maximum likelihood estimation of orbital parameters
-    def ml_orbit(self, maxiter=200):
+    def ml_orbit(self, maxiter=200, disp=False):
         """
         This method produces the maximum likelihood estimation of the orbital
         parameters.
 
-        :param maxiter: int
+        :param maxiter: int, optional
             Maximum number of iterations on scipy.minimize. Default=200
+
+        :param disp: bool, optional
+            Display information about the minimization.
 
         :return: array
             An array with the estimated values of the parameters that best model
@@ -133,7 +136,13 @@ class OrbitalParams(object):
                              x0=self.guess,
                              method='TNC',
                              bounds=self.bounds,
-                             options={'maxiter': maxiter, "disp": True})
+                             options={'maxiter': maxiter, "disp": disp})
+
+        if disp is True:
+            print('Number of iterations performed = %i' % result['nit'])
+            print('Minimization successful = %s' % repr(result['success']))
+            print('Cause of termination = %s' % result['message'])
+
         return result["x"]
 
     # Flat priors
@@ -203,33 +212,8 @@ class OrbitalParams(object):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
-
-        fig, axes = plt.subplots(nrows=3, ncols=2, sharex=True, figsize=(6, 6))
-        axes[0, 0].plot(sampler.chain[:, :, 0].T)
-        #axes[0].axhline(y=np.log10(k_true), linewidth=3, color='orange')
-        axes[0, 0].set_ylabel(r'$K$')
-        axes[1, 0].plot(sampler.chain[:, :, 1].T)
-        #axes[1].axhline(y=np.log10(period_true), linewidth=3,
-        #                color='orange')
-        axes[1, 0].set_ylabel(r'$T$')
-        axes[2, 0].plot(sampler.chain[:, :, 2].T)
-        #axes[2].axhline(y=t0_true, linewidth=3, color='orange')
-        axes[2, 0].set_ylabel(r'$t_0$')
-        axes[0, 1].plot(sampler.chain[:, :, 3].T)
-        # axes[3].axhline(y=w_true, linewidth=3, color='orange')
-        axes[0, 1].set_ylabel(r'$w$')
-        axes[1, 1].plot(sampler.chain[:, :, 4].T)
-        # axes[4].axhline(y=np.log10(e_true), linewidth=3, color='orange')
-        axes[1, 1].set_ylabel(r'$e$')
-        axes[2, 1].plot(sampler.chain[:, :, 5].T)
-        # axes[5].axhline(y=vz, linewidth=3, color='orange')
-        axes[2, 1].set_ylabel(r'$V_Z$')
-        plt.xlabel('step number')
-        plt.show()
-
-        samples = sampler.chain[:, :, :].reshape((-1, ndim))
-        print(self.lnprob(samples[-1]))
-        return samples, sampler
+        samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
+        return samples
 
 
 # The following is used for testing when estimate.py is run by itself
@@ -292,13 +276,13 @@ if __name__ == '__main__':
 
     # We instantiate the class OrbitalParams with our data
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess,
-                          bounds=((-2, -1), (0.4, 0.5), (1490, 1510), (5, 20),
-                                  (-0.7, -0.6)),
-                          bounds_vz=((-1, 1), (-1, 1)),
+                          #bounds=((-2, -1), (0.4, 0.5), (1490, 1510), (5, 20),
+                          #        (-0.8, -0.6)),
+                          #bounds_vz=((-1, 1), (-1, 1)),
                           n_datasets=2)
 
     # And run the estimation
-    params_ml = estim.ml_orbit()
+    params_ml = estim.ml_orbit(disp=True, maxiter=500)
     print('Orbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     print('\nResults:')
@@ -312,27 +296,11 @@ if __name__ == '__main__':
           (k_true, period_true, t0_true, w_true, e_true, vz[0]-rv_m[0],
            vz[1]-rv_m[1]))
 
-    # Plotting the results
-    est = orbit.BinarySystem(log_k=params_ml[0],
-                             log_period=params_ml[1],
-                             t0=params_ml[2],
-                             w=params_ml[3],
-                             log_e=params_ml[4])
-    rvs = est.get_rvs(ts=ts, nt=nt)
-    for i in range(2):
-        plt.errorbar(t_d[i], rv_d[i]-params_ml[5+i], yerr=rv_derr[i], fmt='.')
-    plt.plot(ts, rvs)
-    plt.show()
     print('\nFinished testing maximum likelihood estimation.')
     print('---------------------------------------------------------------')
-    """
     print('Starting emcee estimation. It can take a few minutes.')
-    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=params_ml,
-                          #bounds=((-3, -1), (0, 1), (1490, 1500), (0, 20),
-                          #        (-3, -1)),
-                          bounds_vz=(25, 30), dbglvl=1)
     start_time = time.time()
-    _samples, sampler = estim.emcee_orbit(nwalkers=20,
+    _samples = estim.emcee_orbit(nwalkers=20,
                                  ncut=100,
                                  nsteps=1000,
                                  nthreads=4)
@@ -340,42 +308,22 @@ if __name__ == '__main__':
           (time.time() - start_time))
     # corner is used to make these funky triangle plots
     print('Now creating the corner plot.')
-    #corner.corner(_samples,
-    #              labels=[r'$\ln{K}$', r'$\ln{T}$', r'$t_0$', r'$\omega$',
-    #                      r'$\ln{e}$', r'$v_Z$'],
-    #              truths=[np.log10(k_true), np.log10(period_true), t0_true,
-    #                      w_true, np.log10(e_true), vz])
-    #plt.show()
+    corner.corner(_samples,
+                  labels=[r'$\log{K}$', r'$\log{T}$', r'$t_0$', r'$\omega$',
+                          r'$\log{e}$', r'$v_Z1$', r'$v_Z2$'],
+                  truths=[np.log10(k_true), np.log10(period_true), t0_true,
+                          w_true, np.log10(e_true), vz[0]-rv_m[0],
+                          vz[1]-rv_m[1]])
+    plt.savefig('corner.png')
+    plt.show()
 
     # log to linear for some parameters
     _samples[:, 0] = 10 ** _samples[:, 0]
     _samples[:, 1] = 10 ** _samples[:, 1]
     _samples[:, 4] = 10 ** _samples[:, 4]
 
-    #fig, axes = plt.subplots(3, sharex=True, figsize=(6, 6))
-    #axes[0].plot(sampler.chain[:, :, 0].T)
-    #axes[0].axhline(y=np.log10(k_true), linewidth=3, color='orange')
-    #axes[0].set_ylabel(r'$K$')
-    #axes[1].plot(sampler.chain[:, :, 1].T)
-    #axes[1].axhline(y=np.log10(period_true), linewidth=3, color='orange')
-    #axes[1].set_ylabel(r'$T$')
-    #axes[2].plot(sampler.chain[:, :, 2].T)
-    #axes[2].axhline(y=t0_true, linewidth=3, color='orange')
-    #axes[2].set_ylabel(r'$t_0$')
-    #axes[3].plot(sampler.chain[:, :, 3].T)
-    #axes[3].axhline(y=w_true, linewidth=3, color='orange')
-    #axes[3].set_ylabel(r'$w$')
-    #axes[4].plot(sampler.chain[:, :, 4].T)
-    #axes[4].axhline(y=np.log10(e_true), linewidth=3, color='orange')
-    #axes[4].set_ylabel(r'$e$')
-    #axes[5].plot(sampler.chain[:, :, 5].T)
-    #axes[5].axhline(y=vz, linewidth=3, color='orange')
-    #axes[5].set_ylabel(r'$V_Z$')
-    #plt.xlabel('step number')
-    #plt.show()
-
     # Printing results
-    k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz_mcmc = map(
+    k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz0_mcmc, vz1_mcmc = map(
         lambda v: np.array([v[1], v[2] - v[1], v[1] - v[0]]),
         zip(*np.percentile(_samples, [16, 50, 84], axis=0)))
 
@@ -386,6 +334,48 @@ if __name__ == '__main__':
     print('t0 = %.1f + (+ %.1f, -%.1f)' % (t0_mcmc[0], t0_mcmc[1], t0_mcmc[2]))
     print('w = %.1f + (+ %.1f, -%.1f)' % (w_mcmc[0], w_mcmc[1], w_mcmc[2]))
     print('e = %.3f + (+ %.3f, -%.3f)' % (e_mcmc[0], e_mcmc[1], e_mcmc[2]))
-    print('vz = %.3f + (+ %.3f, -%.3f)' % (vz_mcmc[0], vz_mcmc[1], vz_mcmc[2]))
-    print('\nFinished testing emcee estimation')
-    print('---------------------------------------------------------------')"""
+    print(
+        'vz = %.3f + (+ %.3f, -%.3f)' % (vz0_mcmc[0], vz0_mcmc[1], vz0_mcmc[2]))
+    print(
+        'vz = %.3f + (+ %.3f, -%.3f)' % (vz1_mcmc[0], vz1_mcmc[1], vz1_mcmc[2]))
+    print('\nFinished testing emcee estimation.')
+    print('---------------------------------------------------------------')
+    print('Plotting the results.')
+
+    # The results from MLE
+    est_ml = orbit.BinarySystem(log_k=params_ml[0],
+                                log_period=params_ml[1],
+                                t0=params_ml[2],
+                                w=params_ml[3],
+                                log_e=params_ml[4])
+    rvs_ml = est_ml.get_rvs(ts=ts, nt=nt)
+    plt.plot(ts, rvs_ml, label='MLE')
+
+    # The results from emcee
+    est_mcmc = orbit.BinarySystem(log_k=np.log10(k_mcmc[0]),
+                                  log_period=np.log10(period_mcmc[0]),
+                                  t0=t0_mcmc[0],
+                                  w=w_mcmc[0],
+                                  log_e=np.log10(e_mcmc[0]))
+    rvs_mcmc = est_mcmc.get_rvs(ts=ts, nt=nt)
+    plt.plot(ts, rvs_mcmc, label='emcee')
+
+    # Plotting various samples from MCMC
+    s_redux = _samples[:, 0:-2]
+    for k, T, t0, w, e in s_redux[np.random.randint(len(s_redux), size=200)]:
+        est = orbit.BinarySystem(log_k=np.log10(k),
+                                 log_period=np.log10(T),
+                                 t0=t0,
+                                 w=w,
+                                 log_e=np.log10(e))
+        rvs_sample = est.get_rvs(ts=ts, nt=nt)
+        plt.plot(ts, rvs_sample, color="k", alpha=0.05)
+
+    # The data
+    for i in range(2):
+        plt.errorbar(t_d[i], rv_d[i] - params_ml[5 + i], yerr=rv_derr[i],
+                     fmt='.')
+    plt.plot(ts, rvs, label='True orbit')
+
+    plt.legend()
+    plt.show()
