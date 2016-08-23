@@ -111,7 +111,7 @@ class OrbitalParams(object):
             inv_sigma2 = 1. / self.rv_err[i] ** 2
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
-            sum_like *= -0.5
+        sum_like *= -0.5
         return sum_like
 
     # Maximum likelihood estimation of orbital parameters
