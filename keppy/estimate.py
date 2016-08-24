@@ -34,7 +34,7 @@ class OrbitalParams(object):
         First guess of the orbital parameters in the following order: log10(K),
         log10(T), t0, w and log10(e).
 
-    :param bounds_vz: tuple, optional
+    :param bounds_vz: tuple
         Bounds for the estimation proper motions of the barycenter (vz) for each
         dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
@@ -52,7 +52,7 @@ class OrbitalParams(object):
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz=((-1, 1), (-1, 1)),
+    def __init__(self, t, rv, rv_err, guess, bounds_vz,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
                          (-4, -4.3E-5)), n_datasets=1):
 
@@ -185,7 +185,7 @@ class OrbitalParams(object):
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, ncut=50, nthreads=1):
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1):
         """
         Calculates samples of parameters that best fit the signal rv.
 
@@ -212,8 +212,8 @@ class OrbitalParams(object):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
-        samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
-        return samples
+        # samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
+        return sampler
 
 
 # The following is used for testing when estimate.py is run by itself
@@ -275,11 +275,8 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # We instantiate the class OrbitalParams with our data
-    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess,
-                          #bounds=((-2, -1), (0.4, 0.5), (1490, 1510), (5, 20),
-                          #        (-0.8, -0.6)),
-                          #bounds_vz=((-1, 1), (-1, 1)),
-                          n_datasets=2)
+    estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, n_datasets=2,
+                          bounds_vz=((-1, 1), (-1, 1)))
 
     # And run the estimation
     params_ml = estim.ml_orbit(disp=True, maxiter=500)
@@ -300,10 +297,12 @@ if __name__ == '__main__':
     print('---------------------------------------------------------------')
     print('Starting emcee estimation. It can take a few minutes.')
     start_time = time.time()
-    _samples = estim.emcee_orbit(nwalkers=20,
-                                 ncut=100,
+    _sampler = estim.emcee_orbit(nwalkers=20,
                                  nsteps=1000,
                                  nthreads=4)
+    ncut = 100
+    ndim = 7
+    _samples = samples = _sampler.chain[:, ncut:, :].reshape((-1, ndim))
     print('\nOrbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     # corner is used to make these funky triangle plots
