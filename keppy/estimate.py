@@ -52,7 +52,7 @@ class OrbitalParams(object):
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_logf,
+    def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_sj,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
                          (-4, -4.3E-5)), n_datasets=1):
 
@@ -72,7 +72,7 @@ class OrbitalParams(object):
                                  '2 * n_datasets')
             else:
                 self.guess = guess
-            self.bounds = bounds + (bounds_vz,) + (bounds_logf,)
+            self.bounds = bounds + (bounds_vz,) + (bounds_sj,)
         else:
             self.t = t
             self.rv = rv
@@ -82,7 +82,7 @@ class OrbitalParams(object):
                                  '2 * n_datasets')
             else:
                 self.guess = guess
-            self.bounds = bounds + bounds_vz + bounds_logf
+            self.bounds = bounds + bounds_vz + bounds_sj
 
     # The likelihood function
     # noinspection PyTypeChecker
@@ -104,14 +104,14 @@ class OrbitalParams(object):
         # Measuring the log-likelihood for each dataset separately
         for i in range(self.n_datasets):
             nt = len(self.t[i])
+            sigma_j = 10 ** theta[5 + self.n_datasets + i]
             system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
                                         t0=theta[2], w=theta[3], log_e=theta[4],
                                         vz=theta[5 + i])
             model = system.get_rvs(ts=self.t[i], nt=nt)
-            inv_sigma2 = 1 / (self.rv_err[i] ** 2 + model ** 2 *
-                              10 ** (2 * theta[5 + self.n_datasets + i]))
-            # inv_sigma2 = 1. / (self.rv_err[i] ** 2 +
-            #                   theta[5 + self.n_datasets + i] ** 2)
+            # inv_sigma2 = 1 / (self.rv_err[i] ** 2 + model ** 2 *
+            #                  10 ** (2 * theta[5 + self.n_datasets + i]))
+            inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
         sum_like *= -0.5
@@ -270,7 +270,7 @@ if __name__ == '__main__':
     # The last two values are for the estimates of logf, which is the log10(f),
     # where f is the underestimating factor of the errorbars of each dataset
     _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
-              np.log10(e_true), 0.0, 0.0, 0.0, 0.0]
+              np.log10(e_true), 0.0, 0.0, 1.0, 1.0]
 
     print('\n-------------------------------------------------------------')
     print('Starting maximum likelihood estimation.')
@@ -279,7 +279,7 @@ if __name__ == '__main__':
     # We instantiate the class OrbitalParams with our data
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, n_datasets=2,
                           bounds_vz=((-1, 1), (-1, 1)),
-                          bounds_logf=((-5, 3), (-5, 3)))
+                          bounds_sj=((-3, 3), (-3, 3)))
 
     # And run the estimation
     params_ml = estim.ml_orbit(disp=True, maxiter=1000)
@@ -290,7 +290,7 @@ if __name__ == '__main__':
           'vz1 = %.3f, f0 = %.3f, f1 = %.3f' %
           (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
            params_ml[3], 10 ** params_ml[4], params_ml[5], params_ml[6],
-           10 ** params_ml[7], 10 ** params_ml[8]))
+           params_ml[7], params_ml[8]))
     print('\n"True" values:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
           'vz1 = %.3f' %
@@ -325,8 +325,8 @@ if __name__ == '__main__':
     _samples[:, 0] = 10 ** _samples[:, 0]
     _samples[:, 1] = 10 ** _samples[:, 1]
     _samples[:, 4] = 10 ** _samples[:, 4]
-    _samples[:, 7] = 10 ** _samples[:, 7]
-    _samples[:, 8] = 10 ** _samples[:, 8]
+    # _samples[:, 7] = 10 ** _samples[:, 7]
+    # _samples[:, 8] = 10 ** _samples[:, 8]
 
     # Printing results
     k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz0_mcmc, vz1_mcmc, f0_mcmc, \
