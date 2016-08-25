@@ -288,7 +288,7 @@ if __name__ == '__main__':
           (time.time() - start_time))
     print('\nResults:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
-          'vz1 = %.3f, f0 = %.3f, f1 = %.3f' %
+          'vz1 = %.3f, sj0 = %.3f, sj1 = %.3f' %
           (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
            params_ml[3], 10 ** params_ml[4], params_ml[5], params_ml[6],
            params_ml[7], params_ml[8]))
@@ -317,7 +317,7 @@ if __name__ == '__main__':
     corner.corner(_samples,
                   labels=[r'$\log{K}$', r'$\log{T}$', r'$t_0$', r'$\omega$',
                           r'$\log{e}$', r'$v_{Z0}$', r'$v_{Z1}$',
-                          r'$\log{f_0}$', r'$\log{f_1}$'],
+                          r'$s_{j0}$', r'$s_{j1}$'],
                   truths=[np.log10(k_true), np.log10(period_true), t0_true,
                           w_true, np.log10(e_true), vz[0]-rv_m[0],
                           vz[1]-rv_m[1], 0.0, 0.0])
@@ -347,8 +347,8 @@ if __name__ == '__main__':
        'vz0 = %.3f + (+ %.3f, -%.3f)' % (vz0_mcmc[0], vz0_mcmc[1], vz0_mcmc[2]))
     print(
        'vz1 = %.3f + (+ %.3f, -%.3f)' % (vz1_mcmc[0], vz1_mcmc[1], vz1_mcmc[2]))
-    print('f0 = %.3f + (+ %.3f, -%.3f)' % (f0_mcmc[0], f0_mcmc[1], f0_mcmc[2]))
-    print('f1 = %.3f + (+ %.3f, -%.3f)' % (f1_mcmc[0], f1_mcmc[1], f1_mcmc[2]))
+    print('sj0 = %.3f + (+ %.3f, -%.3f)' % (f0_mcmc[0], f0_mcmc[1], f0_mcmc[2]))
+    print('sj1 = %.3f + (+ %.3f, -%.3f)' % (f1_mcmc[0], f1_mcmc[1], f1_mcmc[2]))
     print('\nFinished testing emcee estimation.')
     print('---------------------------------------------------------------')
     print('Plotting the results.')
