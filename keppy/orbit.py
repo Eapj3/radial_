@@ -5,7 +5,6 @@ from __future__ import (absolute_import, division, print_function,
 
 import numpy as np
 import scipy.optimize as sp
-from astropy import units as u
 
 """
 This module computes the radial velocities of a massive object being orbited by
