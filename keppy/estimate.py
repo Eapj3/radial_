@@ -35,10 +35,15 @@ class OrbitalParams(object):
         log10(T), t0, w and log10(e).
 
     :param bounds_vz: tuple
-        Bounds for the estimation proper motions of the barycenter (vz) for each
-        dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
+        Bounds for the estimation of proper motions of the barycenter (vz) for
+        each dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
         to (2,).
+
+    :param bounds_sj: tuple
+        Bounds for the estimation of jitter noise for each dataset. It must have
+        a `numpy.shape` equal to (n_datasets, 2), if n_datasets > 1. If
+        n_datasets == 1, then its `numpy.shape` must be equal to (2,).
 
     :param bounds: tuple, optional
         Bounds for the estimation of the orbital parameters, with the exception
@@ -104,13 +109,11 @@ class OrbitalParams(object):
         # Measuring the log-likelihood for each dataset separately
         for i in range(self.n_datasets):
             nt = len(self.t[i])
-            sigma_j = 10 ** theta[5 + self.n_datasets + i]
+            sigma_j = theta[5 + self.n_datasets + i]
             system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
                                         t0=theta[2], w=theta[3], log_e=theta[4],
                                         vz=theta[5 + i])
             model = system.get_rvs(ts=self.t[i], nt=nt)
-            # inv_sigma2 = 1 / (self.rv_err[i] ** 2 + model ** 2 *
-            #                  10 ** (2 * theta[5 + self.n_datasets + i]))
             inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
@@ -129,10 +132,9 @@ class OrbitalParams(object):
         :param disp: bool, optional
             Display information about the minimization.
 
-        :return: array
+        :return params: array
             An array with the estimated values of the parameters that best model
             the signal rv
-
         """
         nll = lambda *args: -self.lnlike(*args)
         result = op.minimize(fun=nll,
@@ -146,7 +148,8 @@ class OrbitalParams(object):
             print('Minimization successful = %s' % repr(result['success']))
             print('Cause of termination = %s' % result['message'])
 
-        return result["x"]
+        params = result["x"]
+        return params
 
     # Flat priors
     def flat(self, theta):
@@ -201,9 +204,8 @@ class OrbitalParams(object):
         :param nthreads: int
             Number of threads in your machine
 
-        :return: array
-            emcee samples that can be used to make a triangle plot using the
-            corner routine
+        :return sampler: array
+            `emcee.EnsembleSampler` object that is used for posterior analysis
         """
         ndim = 5 + 2 * self.n_datasets
         pos = np.array([self.guess + 1e-2 * np.random.randn(ndim)
@@ -212,7 +214,6 @@ class OrbitalParams(object):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
-        # samples = sampler.chain[:, ncut:, :].reshape((-1, ndim))
         return sampler
 
 
@@ -270,7 +271,7 @@ if __name__ == '__main__':
     # The last two values are for the estimates of logf, which is the log10(f),
     # where f is the underestimating factor of the errorbars of each dataset
     _guess = [np.log10(k_true), np.log10(period_true), t0_true, w_true,
-              np.log10(e_true), 0.0, 0.0, 1.0, 1.0]
+              np.log10(e_true), 0.0, 0.0, 0.5, 0.5]
 
     print('\n-------------------------------------------------------------')
     print('Starting maximum likelihood estimation.')
@@ -279,7 +280,7 @@ if __name__ == '__main__':
     # We instantiate the class OrbitalParams with our data
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, n_datasets=2,
                           bounds_vz=((-1, 1), (-1, 1)),
-                          bounds_sj=((-3, 3), (-3, 3)))
+                          bounds_sj=((-1, 1), (-1, 1)))
 
     # And run the estimation
     params_ml = estim.ml_orbit(disp=True, maxiter=1000)
@@ -304,11 +305,13 @@ if __name__ == '__main__':
     _sampler = estim.emcee_orbit(nwalkers=20,
                                  nsteps=10000,
                                  nthreads=4)
-    ncut = 5000
-    ndim = 9
-    _samples = samples = _sampler.chain[:, ncut:, :].reshape((-1, ndim))
+    _ncut = 4000
+    _ndim = 9
+    _samples = samples = _sampler.chain[:, _ncut:, :].reshape((-1, _ndim))
     print('\nOrbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
+    _samples[:, 7] = np.abs(_samples[:, 7])
+    _samples[:, 8] = np.abs(_samples[:, 8])
     # corner is used to make these funky triangle plots
     print('Now creating the corner plot.')
     corner.corner(_samples,
@@ -380,10 +383,11 @@ if __name__ == '__main__':
         plt.plot(ts, rvs_sample, color="k", alpha=0.05)
 
     # The data
-    for i in range(2):
-        plt.errorbar(t_d[i], rv_d[i] - params_ml[5 + i], yerr=rv_derr[i],
+    for k in range(2):
+        plt.errorbar(t_d[k], rv_d[k] - params_ml[5 + k], yerr=rv_derr[k],
                      fmt='.')
     plt.plot(ts, rvs, label='True orbit')
 
     plt.legend()
     plt.show()
+
