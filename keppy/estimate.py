@@ -108,12 +108,15 @@ class OrbitalParams(object):
         sum_like = 0
         # Measuring the log-likelihood for each dataset separately
         for i in range(self.n_datasets):
-            nt = len(self.t[i])
+            if self.n_datasets > 1:
+                n = len(self.t[i])
+            else:
+                n = len(self.t)
             sigma_j = theta[5 + self.n_datasets + i]
             system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
                                         t0=theta[2], w=theta[3], log_e=theta[4],
                                         vz=theta[5 + i])
-            model = system.get_rvs(ts=self.t[i], nt=nt)
+            model = system.get_rvs(ts=self.t[i], nt=n)
             inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
@@ -208,7 +211,7 @@ class OrbitalParams(object):
             `emcee.EnsembleSampler` object that is used for posterior analysis
         """
         ndim = 5 + 2 * self.n_datasets
-        pos = np.array([self.guess + 1e-2 * np.random.randn(ndim)
+        pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
                         for i in range(nwalkers)])
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
@@ -264,8 +267,8 @@ if __name__ == '__main__':
     print('Mean of RVs = %.3f, %.3f' % (rv_m[0], rv_m[1]))
 
     # Subtracting the mean of each RV dataset
-    for i in range(len(rv_d)):
-        rv_d[i] -= rv_m[i]
+    for l in range(len(rv_d)):
+        rv_d[l] -= rv_m[l]
 
     # We use the true values as the initial guess for the orbital parameters
     # The last two values are for the estimates of logf, which is the log10(f),
