@@ -194,7 +194,7 @@ class OrbitalParams(object):
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1):
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1, ballsize=1E-2):
         """
         Calculates samples of parameters that best fit the signal rv.
 
@@ -207,11 +207,15 @@ class OrbitalParams(object):
         :param nthreads: int
             Number of threads in your machine
 
+        :param ballsize: float
+            The one-dimensional size of the volume from which to generate a
+            first position to start the chain.
+
         :return sampler: array
             `emcee.EnsembleSampler` object that is used for posterior analysis
         """
         ndim = 5 + 2 * self.n_datasets
-        pos = np.array([self.guess + 1e-4 * np.random.randn(ndim)
+        pos = np.array([self.guess + ballsize * np.random.randn(ndim)
                         for i in range(nwalkers)])
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
