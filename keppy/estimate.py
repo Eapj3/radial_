@@ -56,10 +56,15 @@ class OrbitalParams(object):
         datasets comprise, e.g., observations from different instruments. This
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
+
+    :param fold: bool, optional
+        If True, the analysis will be performed by phase-folding the radial
+        velocities. If False, analysis is performed on the given time array.
+        Default is False.
     """
     def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_sj,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (0, 360),
-                         (-4, -4.3E-5)), n_datasets=1):
+                         (-4, -4.3E-5)), n_datasets=1, fold=False):
 
         if isinstance(n_datasets, int) is False:
             raise TypeError('n_datasets must be int')
@@ -89,6 +94,8 @@ class OrbitalParams(object):
                 self.guess = guess
             self.bounds = bounds + bounds_vz + bounds_sj
 
+        self.fold = fold
+
     # The likelihood function
     # noinspection PyTypeChecker
     def lnlike(self, theta):
@@ -106,29 +113,25 @@ class OrbitalParams(object):
         """
         # log_k, log_period, t0, w, log_e, vz = theta
         sum_like = 0
-        # Measuring the log-likelihood for each dataset separately
-        if self.n_datasets == 1:
-            n = len(self.t)
-            sigma_j = theta[5 + self.n_datasets]
-            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
-                                        t0=theta[2], w=theta[3],
-                                        log_e=theta[4], vz=theta[5])
-            model = system.get_rvs(ts=self.t, nt=n)
-            inv_sigma2 = 1. / (self.rv_err ** 2 + sigma_j ** 2)
-            sum_like = 0.5 * np.sum((self.rv - model) ** 2 * inv_sigma2 +
-                                    np.log(2. * np.pi / inv_sigma2))
+        if self.fold is True:
+            time_array = self.t / (10 ** theta[1]) % 1
         else:
-            for i in range(self.n_datasets):
-                n = len(self.t[i])
-                sigma_j = theta[5 + self.n_datasets + i]
-                system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
-                                            t0=theta[2], w=theta[3],
-                                            log_e=theta[4], vz=theta[5 + i])
-                model = system.get_rvs(ts=self.t[i], nt=n)
-                inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
-                sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
-                                   np.log(2. * np.pi / inv_sigma2))
-            sum_like *= -0.5
+            time_array = self.t
+        # Measuring the log-likelihood for each dataset separately
+        for i in range(self.n_datasets):
+            if self.n_datasets > 1:
+                n = len(time_array[i])
+            else:
+                n = len(time_array[0])
+            sigma_j = theta[5 + self.n_datasets + i]
+            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
+                                        t0=theta[2], w=theta[3], log_e=theta[4],
+                                        vz=theta[5 + i])
+            model = system.get_rvs(ts=time_array[i], nt=n)
+            inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
+            sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
+                               np.log(2. * np.pi / inv_sigma2))
+        sum_like *= -0.5
         return sum_like
 
     # Maximum likelihood estimation of orbital parameters
@@ -267,9 +270,25 @@ if __name__ == '__main__':
     rv_derr = np.array([0.015 + np.random.normal(loc=0.0, scale=0.005)
                         for k in rvs])
 
-    # Adding an offset to the RVs
-    rv_d += vz
+    # Breaking the RV data in the middle in order to simulate different datasets
+    """
+    new_rv_d = np.array([rv_d[:npoints//2].tolist(),
+                         rv_d[npoints//2:].tolist()])
+    new_t_d = np.array([t_d[:npoints//2].tolist(), t_d[npoints//2:].tolist()])
+    new_rv_d[0] += vz[0]
+    new_rv_d[1] += vz[1]
+    rv_d = new_rv_d
+    t_d = new_t_d
+    rv_m = [np.mean(rv_d[0]), np.mean(rv_d[1])]
+    print('Mean of RVs = %.3f, %.3f' % (rv_m[0], rv_m[1]))
 
+    # Subtracting the mean of each RV dataset
+    for l in range(len(rv_d)):
+        rv_d[l] -= rv_m[l]
+    """
+    rv_d = [rv_d + vz]
+    t_d = [t_d]
+    rv_derr = [rv_derr]
     # We use the true values as the initial guess for the orbital parameters
     # The last two values are for the estimates of logf, which is the log10(f),
     # where f is the underestimating factor of the errorbars of each dataset
@@ -283,17 +302,17 @@ if __name__ == '__main__':
     # We instantiate the class OrbitalParams with our data
     estim = OrbitalParams(t_d, rv_d, rv_derr, guess=_guess, n_datasets=1,
                           bounds_vz=(25, 35),
-                          bounds_sj=(-1, 1))
+                          bounds_sj=(-1, 1), fold=True)
 
     # And run the estimation
-    params_ml = estim.ml_orbit(disp=True, maxiter=20000)
+    params_ml = estim.ml_orbit(disp=True, maxiter=1000)
     print('Orbital parameters estimation took %.4f seconds.' %
           (time.time() - start_time))
     print('\nResults:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f, '
-          'sj0 = %.3f' % (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
-                          params_ml[3], 10 ** params_ml[4], params_ml[5],
-                          params_ml[6]))
+          'sj0 = %.3f' %
+          (10 ** params_ml[0], 10 ** params_ml[1], params_ml[2],
+           params_ml[3], 10 ** params_ml[4], params_ml[5], params_ml[6]))
     print('\n"True" values:')
     print('K = %.3f, T = %.2f, t0 = %.1f, w = %.1f, e = %.3f, vz0 = %.3f' %
           (k_true, period_true, t0_true, w_true, e_true, vz))
@@ -303,9 +322,9 @@ if __name__ == '__main__':
     print('Starting emcee estimation. It can take a few minutes.')
     start_time = time.time()
     _sampler = estim.emcee_orbit(nwalkers=14,
-                                 nsteps=5000,
+                                 nsteps=15000,
                                  nthreads=4)
-    _ncut = 1000
+    _ncut = 2000
     _ndim = 7
     _samples = samples = _sampler.chain[:, _ncut:, :].reshape((-1, _ndim))
     print('\nOrbital parameters estimation took %.4f seconds.' %
@@ -329,9 +348,9 @@ if __name__ == '__main__':
     # _samples[:, 8] = 10 ** _samples[:, 8]
 
     # Printing results
-    k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz0_mcmc, f0_mcmc \
-        = map(lambda v: np.array([v[1], v[2] - v[1], v[1] - v[0]]),
-              zip(*np.percentile(_samples, [16, 50, 84], axis=0)))
+    k_mcmc, period_mcmc, t0_mcmc, w_mcmc, e_mcmc, vz0_mcmc, f0_mcmc = \
+        map(lambda v: np.array([v[1], v[2] - v[1], v[1] - v[0]]),
+            zip(*np.percentile(_samples, [16, 50, 84], axis=0)))
 
     print('\nResults:')
     print('K = %.3f + (+ %.3f, -%.3f)' % (k_mcmc[0], k_mcmc[1], k_mcmc[2]))
@@ -342,10 +361,13 @@ if __name__ == '__main__':
     print('e = %.3f + (+ %.3f, -%.3f)' % (e_mcmc[0], e_mcmc[1], e_mcmc[2]))
     print(
        'vz0 = %.3f + (+ %.3f, -%.3f)' % (vz0_mcmc[0], vz0_mcmc[1], vz0_mcmc[2]))
+    # print(
+    #   'vz1 = %.3f + (+ %.3f, -%.3f)' % (vz1_mcmc[0], vz1_mcmc[1], vz1_mcmc[2]))
     print('sj0 = %.3f + (+ %.3f, -%.3f)' % (f0_mcmc[0], f0_mcmc[1], f0_mcmc[2]))
+    # print('sj1 = %.3f + (+ %.3f, -%.3f)' % (f1_mcmc[0], f1_mcmc[1], f1_mcmc[2]))
     print('\nFinished testing emcee estimation.')
     print('---------------------------------------------------------------')
-"""
+    """
     print('Plotting the results.')
 
     # The results from MLE
@@ -385,4 +407,4 @@ if __name__ == '__main__':
 
     plt.legend()
     plt.show()
-"""
+    """

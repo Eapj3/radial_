@@ -118,7 +118,7 @@ class BinarySystem(object):
         return e_ano - self.e * np.sin(e_ano) - m_ano
 
     # Calculates the radial velocities for given orbital parameters
-    def get_rvs(self, ts, nt=1000):
+    def get_rvs(self, ts=np.linspace(0, 1, 1000), nt=1000, fold=False):
         """
         Computes the radial velocity given the orbital parameters.
 
@@ -128,12 +128,19 @@ class BinarySystem(object):
         :param nt: int
             Number of points for one period. Default=1000.
 
+        :param fold: bool, optional
+            Switch to phase-fold the radial velocities. Default is False.
+
         :return: scalar or array
             Radial velocities [km/s]
         """
         # Calculating RVs for one period
-        t = np.linspace(self.t0, self.t0 + self.period, nt)       # Time (days)
-        m_ano = 2 * np.pi / self.period * (t - self.t0)           # Mean anomaly
+        if fold is True:
+            t = np.linspace(0, 1, nt)
+            m_ano = 2 * np.pi * t
+        else:
+            t = np.linspace(self.t0, self.t0 + self.period, nt)   # Time (days)
+            m_ano = 2 * np.pi / self.period * (t - self.t0)       # Mean anomaly
         e_ano = np.array([sp.newton(func=self.kep_eq, x0=mk, args=(mk,))
                           for mk in m_ano])                  # Eccentric anomaly
         # Computing the true anomaly
@@ -144,7 +151,10 @@ class BinarySystem(object):
 
         rv = np.array([self.vr(fk) for fk in f])      # RVs (km/s)
         # Calculating RVs in the specified time interval
-        rvs = np.interp(ts, t, rv, period=self.period)
+        if fold is True:
+            rvs = np.interp(ts, t, rv, period=1)
+        else:
+            rvs = np.interp(ts, t, rv, period=self.period)
         return rvs
 
 
@@ -154,7 +164,8 @@ if __name__ == '__main__':
 
     print('---------------------------------------')
     print('Starting test of keppy.orbit\n')
-    t_sim = np.linspace(3600., 4200., 1000)  # The time window [JD-2.45E6 days]
+    # t_sim = np.linspace(3600., 4200., 1000)  # The time window
+    t_sim = np.linspace(0, 1, 1000)
     start_time = time.time()  # We use this to measure the computation time
 
     # First, we create an instance of the system HIP156846
@@ -166,7 +177,7 @@ if __name__ == '__main__':
                              vz=-68.54)
 
     # The RVs are computed simply by running get_rvs()
-    _rvs = HIP156846.get_rvs(nt=1000, ts=t_sim)
+    _rvs = HIP156846.get_rvs(nt=1000, ts=t_sim, fold=True)
     print('RV calculation took %.4f seconds' % (time.time() - start_time))
 
     # Plotting results
