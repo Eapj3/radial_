@@ -40,44 +40,29 @@ class BinarySystem(object):
     vz : scalar
         Proper motion of the barycenter [km/s]
     """
-    def __init__(self, log_k, log_period, t0, w, log_e, vz=0.0):
+    def __init__(self, log_k, log_period, t0, w=None, log_e=None, sqe_cosw=None,
+                 sqe_sinw=None, vz=0.0):
 
-        if isinstance(log_k, float) or isinstance(log_k, int):
-            self.log_k = log_k
+        if w is None or log_e is None:
+            if sqe_cosw is None or sqe_sinw is None:
+                raise ValueError('Either of these pairs have to be provided: '
+                                 '(w, log_e) or (sqe_cosw, sqe_sinw)')
+            else:
+                self.e = sqe_sinw ** 2 + sqe_cosw ** 2
+                self.w_rad = np.arctan2(sqe_sinw, sqe_cosw)
         else:
-            raise TypeError('log_k is not scalar')
+            self.e = 10 ** log_e
+            self.w_rad = w * np.pi / 180.
 
-        if isinstance(log_period, float) or isinstance(log_period, int):
-            self.log_period = log_period
-        else:
-            raise TypeError('log_period is not scalar')
-
-        if isinstance(t0, float) or isinstance(t0, int):
-            self.t0 = t0
-        else:
-            raise TypeError('t0 is not scalar')
-
-        if isinstance(w, float) or isinstance(w, int):
-            self.w = w
-        else:
-            raise TypeError('w is not scalar')
-
-        if isinstance(log_e, float) or isinstance(log_e, int):
-            self.log_e = log_e
-        else:
-            raise TypeError('log_e is not scalar')
-
-        if isinstance(vz, float) or isinstance(vz, int):
-            self.vz = vz
-        else:
-            raise TypeError('vz is not scalar')
-
-        self.w_rad = w * np.pi / 180.
+        print(self.e)
+        print(self.w_rad * 180 / np.pi)
+        #self.w_rad = self.w * np.pi / 180.
         self.k = 10 ** log_k
         self.period = 10 ** log_period
-        self.e = 10 ** log_e
+        self.t0 = t0
+        self.vz = vz
 
-        if self.e > 0.9999:
+        if self.e > 0.999999:
             raise ValueError('Keplerian orbits are ellipses, therefore e <= 1')
 
     # Calculates Eq. 65
@@ -172,8 +157,10 @@ if __name__ == '__main__':
     HIP156846 = BinarySystem(log_k=np.log10(0.464),
                              log_period=np.log10(359.51),
                              t0=3998.1,
-                             w=52.2,
-                             log_e=np.log10(0.847),
+                             #w=52.2,
+                             #log_e=np.log10(0.847),
+                             sqe_cosw=np.sqrt(0.847) * np.cos(np.radians(52.2)),
+                             sqe_sinw=np.sqrt(0.847) * np.sin(np.radians(52.2)),
                              vz=-68.54)
 
     # The RVs are computed simply by running get_rvs()

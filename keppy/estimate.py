@@ -322,7 +322,7 @@ if __name__ == '__main__':
     print('Starting emcee estimation. It can take a few minutes.')
     start_time = time.time()
     _sampler = estim.emcee_orbit(nwalkers=14,
-                                 nsteps=15000,
+                                 nsteps=20000,
                                  nthreads=4)
     _ncut = 2000
     _ndim = 7
