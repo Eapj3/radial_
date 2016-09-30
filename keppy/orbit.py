@@ -31,11 +31,23 @@ class BinarySystem(object):
     t0 : scalar
         Time of pariastron passage [JD - 2.45E6 days]
 
-    w : scalar
-        Argument of periapse [degrees]
+    w : scalar or ``None``, optional
+        Argument of periapse [degrees]. If ``None``, both ``sqe_cosw`` and
+        ``sqe_sinw`` will be required. Default is ``None``.
 
-    log_e : scalar
-        Natural logarithm of the eccentricity
+    log_e : scalar or ``None``, optional
+        Natural logarithm of the eccentricity. If ``None``, both ``sqe_cosw``
+        and ``sqe_sinw`` will be required. Default is ``None``.
+
+    sqe_cosw : scalar or ``None``, optional
+        The square root of the eccentricity multiplied by the cosine of the
+        argument of periapse. If ``None``, both ``w`` and ``log_e`` will be
+        required. Default is ``None``.
+
+    sqe_sinw : scalar or ``None``, optional
+        The square root of the eccentricity multiplied by the sine of the
+        argument of periapse. If ``None``, both ``w`` and ``log_e`` will be
+        required. Default is ``None``.
 
     vz : scalar
         Proper motion of the barycenter [km/s]
@@ -91,32 +103,41 @@ class BinarySystem(object):
         """
         The Kepler equation.
 
-        :param e_ano: scalar or array
+        Parameters
+        ----------
+        e_ano : scalar or array
             Eccentric anomaly [radians]
 
-        :param m_ano: scalar or array
+        m_ano : scalar or array
             Mean anomaly [radians]
 
-        :return: scalar or array
+        Returns
+        -------
+        kep: scalar or array
             Value of E-e*sin(E)-M
         """
-        return e_ano - self.e * np.sin(e_ano) - m_ano
+        kep = e_ano - self.e * np.sin(e_ano) - m_ano
+        return kep
 
     # Calculates the radial velocities for given orbital parameters
     def get_rvs(self, ts=np.linspace(0, 1, 1000), nt=1000, fold=False):
         """
         Computes the radial velocity given the orbital parameters.
 
-        :param ts: scalar or array
+        Parameters
+        ----------
+        ts : scalar or array
             Time [d]
 
-        :param nt: int
+        nt : int
             Number of points for one period. Default=1000.
 
-        :param fold: bool, optional
+        fold : bool, optional
             Switch to phase-fold the radial velocities. Default is False.
 
-        :return: scalar or array
+        Returns
+        -------
+        rvs : scalar or array
             Radial velocities [km/s]
         """
         # Calculating RVs for one period
