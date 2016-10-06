@@ -46,9 +46,10 @@ class OrbitalParams(object):
         to (2,).
 
     bounds_sj: ``tuple``
-        Bounds for the estimation of jitter noise for each dataset. It must have
-        a `numpy.shape` equal to (n_datasets, 2), if n_datasets > 1. If
-        n_datasets == 1, then its `numpy.shape` must be equal to (2,).
+        Bounds for the estimation of the logarithm of the jitter noise for each
+        dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
+        n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
+        to (2,).
 
     bounds : ``tuple``, optional
         Bounds for the estimation of the orbital parameters, with the exception
@@ -132,12 +133,12 @@ class OrbitalParams(object):
                 n = len(time_array[i])
             else:
                 n = len(time_array[0])
-            sigma_j = theta[5 + self.n_datasets + i]
+            log_sigma_j = theta[5 + self.n_datasets + i]
             system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
                                         t0=theta[2], sqe_cosw=theta[3],
                                         sqe_sinw=theta[4], vz=theta[5 + i])
             model = system.get_rvs(ts=time_array[i], nt=n)
-            inv_sigma2 = 1. / (self.rv_err[i] ** 2 + sigma_j ** 2)
+            inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j) ** 2)
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
         sum_like *= -0.5
