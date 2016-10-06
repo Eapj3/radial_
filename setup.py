@@ -9,7 +9,7 @@ config = {
     'download_url': 'https://github.com/RogueAstro/keppy',
     'author_email': 'leonardoags@usp.br',
     'version': '0.1.dev',
-    'install_requires': ['numpy', 'scipy', 'emcee'],
+    'install_requires': ['numpy', 'scipy', 'emcee', 'matplotlib', 'corner'],
     'packages': ['keppy'],
     'name': 'keppy'
 }

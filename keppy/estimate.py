@@ -21,43 +21,48 @@ class OrbitalParams(object):
     A class that computes the orbital parameters of a binary system given its
     radial velocities (and their uncertainties) in function of time.
 
-    :param t: list of arrays
-        Time [JD - 2.4E6 days]
+    Parameters
+    ----------
+    t : sequence
+        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
+        containing the time [JD - 2.4E6 days]
 
-    :param rv: list of arrays
-        Radial velocities [km/s]
+    rv : sequence
+        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
+        containing the radial velocities [km/s]
 
-    :param rv_err: list of arrays
-        Uncertainties of the radial velocities [km/s]
+    rv_err : sequence
+        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
+        containing the uncertainties of the radial velocities [km/s]
 
-    :param guess: array
+    guess : sequence
         First guess of the orbital parameters in the following order: log10(K),
         log10(T), t0, w and log10(e).
 
-    :param bounds_vz: tuple
+    bounds_vz : sequence or ``tuple``
         Bounds for the estimation of proper motions of the barycenter (vz) for
         each dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
         to (2,).
 
-    :param bounds_sj: tuple
+    bounds_sj: ``tuple``
         Bounds for the estimation of jitter noise for each dataset. It must have
         a `numpy.shape` equal to (n_datasets, 2), if n_datasets > 1. If
         n_datasets == 1, then its `numpy.shape` must be equal to (2,).
 
-    :param bounds: tuple, optional
+    bounds : ``tuple``, optional
         Bounds for the estimation of the orbital parameters, with the exception
         of the proper motion of the barycenter (vz). It must have numpy.shape
         equal to (5, 2). Default is ((-4, 4), (-4, 4), (0, 10000), (0, 360),
         (-4, -4.3E-5)).
 
-    :param n_datasets: int, optional
+    n_datasets : ``int``, optional
         Number of datasets to be used for the orbit estimation. Different
         datasets comprise, e.g., observations from different instruments. This
         is necessary because different instruments have different offsets in
         the radial velocities. Default is 1.
 
-    :param fold: bool, optional
+    fold: ``bool``, optional
         If True, the analysis will be performed by phase-folding the radial
         velocities. If False, analysis is performed on the given time array.
         Default is False.
@@ -103,11 +108,15 @@ class OrbitalParams(object):
         This method produces the ln of the Gaussian likelihood function of a
         given set of parameters producing the observed data (t, rv +/- rv_err).
 
-        :param theta: array
+        Parameters
+        ----------
+        theta : ``numpy.ndarray``
             Array containing the 5+n_datasets parameters log_k, log_period, t0,
             w, log_e and the velocity offsets for each dataset
 
-        :return sum_like: float
+        Returns
+        -------
+        sum_like : ``float``
             The ln of the likelihood of the signal rv being the result of a
             model with parameters theta
         """
@@ -140,13 +149,17 @@ class OrbitalParams(object):
         This method produces the maximum likelihood estimation of the orbital
         parameters.
 
-        :param maxiter: int, optional
+        Parameters
+        ----------
+        maxiter : ``int``, optional
             Maximum number of iterations on scipy.minimize. Default=200
 
-        :param disp: bool, optional
+        disp : ``bool``, optional
             Display information about the minimization.
 
-        :return params: array
+        Returns
+        -------
+        params : list
             An array with the estimated values of the parameters that best model
             the signal rv
         """
@@ -170,11 +183,15 @@ class OrbitalParams(object):
         """
         Computes a flat prior probability for a given set of parameters theta.
 
-        :param theta: array
-            Array containing the 5+n_datasets parameters log_k, log_period, t0,
-            w, log_e and the velocity offsets for each dataset
+        Parameters
+        ----------
+        theta : sequence
+            The 5+n_datasets parameters log_k, log_period, t0, w, log_e and the
+            velocity offsets for each dataset
 
-        :return prob:
+        Returns
+        -------
+        prob : ``float``
             The prior probability for a given set of orbital parameters.
         """
         params = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
@@ -191,13 +208,15 @@ class OrbitalParams(object):
         This function calculates the ln of the probabilities to be used in the
         MCMC estimation.
 
-        :param theta: array
-            Array with shape [1,5] containing the values of the orbital
-            parameters log_k, log_period, t0, w, log_e
+        Parameters
+        ----------
+        theta: sequence
+            The values of the orbital parameters log_k, log_period, t0, w, log_e
 
-        :return: scalar
-            The probability of the signal rv being the result of a model with
-            the parameters theta
+        Returns
+        -------
+        The probability of the signal rv being the result of a model with the
+        parameters theta
         """
         lp = self.flat(theta)
         if not np.isfinite(lp):
@@ -209,21 +228,25 @@ class OrbitalParams(object):
         """
         Calculates samples of parameters that best fit the signal rv.
 
-        :param nwalkers: int
+        Parameters
+        ----------
+        nwalkers : ``int``
             Number of walkers
 
-        :param nsteps: int
+        nsteps : ``int``
             Number of burning-in steps
 
-        :param nthreads: int
+        nthreads : ``int``
             Number of threads in your machine
 
-        :param ballsize: float
+        ballsize : ``float``
             The one-dimensional size of the volume from which to generate a
             first position to start the chain.
 
-        :return sampler: array
-            `emcee.EnsembleSampler` object that is used for posterior analysis
+        Returns
+        -------
+        sampler : ``emcee.EnsembleSampler``
+            The resulting sampler object.
         """
         ndim = 5 + 2 * self.n_datasets
         pos = np.array([self.guess + ballsize * np.random.randn(ndim)

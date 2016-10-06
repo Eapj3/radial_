@@ -21,7 +21,6 @@ class BinarySystem(object):
 
     Parameters
     ----------
-
     log_k : scalar
         Natural logarithm of the radial velocity semi-amplitude K [km/s]
 
@@ -84,13 +83,11 @@ class BinarySystem(object):
 
         Parameters
         ----------
-
         f : scalar or `numpy.ndarray`
             True anomaly [radians]
 
         Returns
         -------
-
         _rvs : scalar or array
             Radial velocities [km/s]
         """
