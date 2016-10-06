@@ -65,9 +65,6 @@ class BinarySystem(object):
             self.e = 10 ** log_e
             self.w_rad = w * np.pi / 180.
 
-        print(self.e)
-        print(self.w_rad * 180 / np.pi)
-        #self.w_rad = self.w * np.pi / 180.
         self.k = 10 ** log_k
         self.period = 10 ** log_period
         self.t0 = t0
@@ -76,7 +73,7 @@ class BinarySystem(object):
         if self.e > 0.999999:
             raise ValueError('Keplerian orbits are ellipses, therefore e <= 1')
 
-    # Calculates Eq. 65
+    # Compute Eq. 65
     def vr(self, f):
         """
         The radial velocities equation.
@@ -167,7 +164,6 @@ if __name__ == '__main__':
 
     print('---------------------------------------')
     print('Starting test of keppy.orbit\n')
-    # t_sim = np.linspace(3600., 4200., 1000)  # The time window
     t_sim = np.linspace(0, 1, 1000)
     start_time = time.time()  # We use this to measure the computation time
 
@@ -175,8 +171,6 @@ if __name__ == '__main__':
     HIP156846 = BinarySystem(log_k=np.log10(0.464),
                              log_period=np.log10(359.51),
                              t0=3998.1,
-                             #w=52.2,
-                             #log_e=np.log10(0.847),
                              sqe_cosw=np.sqrt(0.847) * np.cos(np.radians(52.2)),
                              sqe_sinw=np.sqrt(0.847) * np.sin(np.radians(52.2)),
                              vz=-68.54)
