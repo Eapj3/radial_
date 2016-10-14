@@ -45,7 +45,7 @@ class OrbitalParams(object):
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
         to (2,).
 
-    bounds_sj: ``tuple``
+    bounds_sj: ``tuple`` or ``None``, optional
         Bounds for the estimation of the logarithm of the jitter noise for each
         dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
         n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
@@ -68,7 +68,7 @@ class OrbitalParams(object):
         velocities. If False, analysis is performed on the given time array.
         Default is False.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_sj,
+    def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_sj=None,
                  bounds=((-4, 4), (-4, 4), (0, 10000), (-1, 1), (-1, 1)),
                  n_datasets=1, fold=False):
 
@@ -79,26 +79,53 @@ class OrbitalParams(object):
         else:
             self.n_datasets = n_datasets
 
-        if self.n_datasets == 1:
-            self.t = t
-            self.rv = rv
-            self.rv_err = rv_err
-            if len(guess) != 5 + 2 * self.n_datasets:
-                raise ValueError('guess must have a length equal to 5 + '
-                                 '2 * n_datasets')
+        # If user does not want to add extra noise term parameters, bounds_sj
+        # must be set to ``None``.
+        self.bounds_sj = bounds_sj
+        if self.bounds_sj is None:
+            if self.n_datasets == 1:
+                self.t = t
+                self.rv = rv
+                self.rv_err = rv_err
+                if len(guess) != 5 + self.n_datasets:
+                    raise ValueError('guess must have a length equal to 5 + '
+                                     'n_datasets')
+                else:
+                    self.guess = guess
+                self.bounds = bounds + (bounds_vz,)
             else:
-                self.guess = guess
-            self.bounds = bounds + (bounds_vz,) + (bounds_sj,)
+                self.t = t
+                self.rv = rv
+                self.rv_err = rv_err
+                if len(guess) != 5 + self.n_datasets:
+                    raise ValueError('guess must have a length equal to 5 + '
+                                     'n_datasets')
+                else:
+                    self.guess = guess
+                self.bounds = bounds + bounds_vz
+        # If user wants to add extra noise term parameters, then bounds_sj must
+        # not be ``None``.
         else:
-            self.t = t
-            self.rv = rv
-            self.rv_err = rv_err
-            if len(guess) != 5 + 2 * self.n_datasets:
-                raise ValueError('guess must have a length equal to 5 + '
-                                 '2 * n_datasets')
+            if self.n_datasets == 1:
+                self.t = t
+                self.rv = rv
+                self.rv_err = rv_err
+                if len(guess) != 5 + 2 * self.n_datasets:
+                    raise ValueError('guess must have a length equal to 5 + '
+                                     '2 * n_datasets')
+                else:
+                    self.guess = guess
+                self.bounds = bounds + (bounds_vz,) + (bounds_sj,)
             else:
-                self.guess = guess
-            self.bounds = bounds + bounds_vz + bounds_sj
+                self.t = t
+                self.rv = rv
+                self.rv_err = rv_err
+                if len(guess) != 5 + 2 * self.n_datasets:
+                    raise ValueError('guess must have a length equal to 5 + '
+                                     '2 * n_datasets')
+                else:
+                    self.guess = guess
+                self.bounds = bounds + bounds_vz + bounds_sj
 
         self.fold = fold
 
@@ -133,12 +160,16 @@ class OrbitalParams(object):
                 n = len(time_array[i])
             else:
                 n = len(time_array[0])
-            log_sigma_j = theta[5 + self.n_datasets + i]
             system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
                                         t0=theta[2], sqe_cosw=theta[3],
                                         sqe_sinw=theta[4], vz=theta[5 + i])
             model = system.get_rvs(ts=time_array[i], nt=n)
-            inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j) ** 2)
+            if self.bounds_sj is None:
+                inv_sigma2 = 1. / (self.rv_err[i] ** 2)
+            else:
+                log_sigma_j = theta[5 + self.n_datasets + i]
+                inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j)
+                                   ** 2)
             sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
                                np.log(2. * np.pi / inv_sigma2))
         sum_like *= -0.5
@@ -187,17 +218,19 @@ class OrbitalParams(object):
         Parameters
         ----------
         theta : sequence
-            The 5+n_datasets parameters log_k, log_period, t0, w, log_e and the
-            velocity offsets for each dataset
+            The orbital and instrumental parameters.
 
         Returns
         -------
         prob : ``float``
-            The prior probability for a given set of orbital parameters.
+            The prior probability for a given set of orbital and instrumental
+            parameters.
         """
+        # Compute the eccentricity beforehand to impose a prior of e < 1 on it
+        ecc = theta[3] ** 2 + theta[4] ** 2
         params = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
                   for i in range(len(theta))]
-        if all(params) is True:
+        if all(params) is True and ecc < 1:
             prob = 0.0
         else:
             prob = -np.inf
@@ -225,7 +258,7 @@ class OrbitalParams(object):
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1, ballsize=1E-2):
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1, ballsizes=1E-2):
         """
         Calculates samples of parameters that best fit the signal rv.
 
@@ -240,7 +273,7 @@ class OrbitalParams(object):
         nthreads : ``int``
             Number of threads in your machine
 
-        ballsize : ``float``
+        ballsizes : scalar or sequence
             The one-dimensional size of the volume from which to generate a
             first position to start the chain.
 
@@ -249,8 +282,13 @@ class OrbitalParams(object):
         sampler : ``emcee.EnsembleSampler``
             The resulting sampler object.
         """
-        ndim = 5 + 2 * self.n_datasets
-        pos = np.array([self.guess + ballsize * np.random.randn(ndim)
+        if self.bounds_sj is None:
+            ndim = 5 + self.n_datasets
+        else:
+            ndim = 5 + 2 * self.n_datasets
+        if isinstance(ballsizes, float) or isinstance(ballsizes, int):
+            ballsizes = np.array([ballsizes] for i in range(ndim))
+        pos = np.array([self.guess + ballsizes * np.random.randn(ndim)
                         for i in range(nwalkers)])
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,

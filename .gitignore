@@ -4,6 +4,8 @@ conf.py
 *.csv
 docs/
 *.dat
+*.png
+scripts/
 
 # Files to be untracked for now
 test.py

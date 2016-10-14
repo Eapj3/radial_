@@ -70,7 +70,7 @@ class BinarySystem(object):
         self.t0 = t0
         self.vz = vz
 
-        if self.e > 0.999999:
+        if self.e > 1:
             raise ValueError('Keplerian orbits are ellipses, therefore e <= 1')
 
     # Compute Eq. 65
