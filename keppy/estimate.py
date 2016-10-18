@@ -5,6 +5,7 @@ import numpy as np
 import scipy.optimize as op
 from keppy import orbit
 import emcee
+import matplotlib
 import matplotlib.pyplot as plt
 import corner
 
@@ -413,7 +414,37 @@ class OrbitalParams(object):
             omega = np.degrees(np.arctan2(sinw, cosw))
             self.samples[:, 4] = ecc
             self.samples[:, 3] = omega
+            # Also change the labels
+            self.labels[4] = r'$e$'
+            self.labels[3] = r'$\omega$'
 
         # Save samples to file if the user requested so
         if save_file is not None:
             np.save(file=save_file, arr=self.samples)
+
+    # Make the corner plot for the samples
+    def plot_corner(self, bins=20, out_file='corner.pdf'):
+        """
+        Make the corner plots.
+
+        Parameters
+        ----------
+        bins: ``str``, optional
+            Number of bins. Default is 20.
+
+        out_file : ``str`` or ``None``, optional
+            Name of the output image file. If ``None``, no outpuf file is
+            produced and the plot is displayed on screen. Default is
+            'corner.pdf'.
+        """
+        assert (self.samples is not None), "The samples must be computed " \
+                                           "before making the corner plot."
+        # Adjusting some useful matplotlib parameters
+        matplotlib.rcParams.update({'font.size': 20})
+        matplotlib.rc('xtick', labelsize=13)
+        matplotlib.rc('ytick', labelsize=13)
+        corner.corner(self.samples, bins, labels=self.labels)
+        if out_file is None:
+            plt.show()
+        else:
+            plt.savefig(out_file)

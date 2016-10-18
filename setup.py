@@ -22,7 +22,7 @@ setup(
     url="https://github.com/RogueAstro/MAROON-X_DRS",
     license="MIT",
     description="Data reduction software for the spectrograph MAROON-X",
-    install_requires=["numpy", "scipy", "emcee"],
+    install_requires=["numpy", "scipy", "matplotlib", "emcee", "corner"],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",
