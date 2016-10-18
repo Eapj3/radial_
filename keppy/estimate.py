@@ -135,6 +135,24 @@ class OrbitalParams(object):
         self.sampler = None
         self.samples = None
 
+        # Dealing with the parameter labels for plots
+        labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
+                        r'$\sqrt{e}\cos{\omega}$', r'$\sqrt{e}\sin{\omega}$']
+        # If the user did not use extra-noise term, no labels for sigma.
+        # Otherwise, include labels for the various sigma for each dataset.
+        if self.bounds_sj is not None:
+            labels_gamma = []
+            labels_sigma = []
+            for i in range(self.n_datasets):
+                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
+                labels_sigma.append(r'$\sigma_{%s}$' % str(i))
+            self.labels = labels_orbit + labels_gamma + labels_sigma
+        else:
+            labels_gamma = []
+            for i in range(self.n_datasets):
+                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
+            self.labels = labels_orbit + labels_gamma
+
     # The likelihood function
     # noinspection PyTypeChecker
     def lnlike(self, theta):
@@ -311,40 +329,22 @@ class OrbitalParams(object):
 
         Parameters
         ----------
-        outfile: ``str`` or ``None``, optional
+        outfile : ``str`` or ``None``, optional
             Name of the output image file to be saved. If ``None``, then no
             output file is produced, and the plot is displayed on screen.
             Default is 'chains.pdf'.
 
-        n_cols: ``int``, optional
+        n_cols : ``int``, optional
             Number of columns of the plot. Default is 2.
 
-        fig_size: tuple, optional
+        fig_size : tuple, optional
             Sizes of each panel of the plot, where the first element of the
             tuple corresponds to the x-direction size, and the second element
             corresponds to the y-direction size. Default is (12, 12).
         """
         assert (self.sampler is not None), "The emcee sampler must be run " \
-                                           "before platting the chains."
+                                           "before plotting the chains."
         n_walkers, n_steps, n_params = np.shape(self.sampler.chain)
-
-        # Dealing with the labels of the plot
-        labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
-                        r'$\sqrt{e}\cos{\omega}$', r'$\sqrt{e}\sin{\omega}$']
-        # If the user did not use extra-noise term, no labels for sigma.
-        # Otherwise, include labels for the various sigma for each dataset.
-        if self.bounds_sj is not None:
-            labels_gamma = []
-            labels_sigma = []
-            for i in range(self.n_datasets):
-                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
-                labels_sigma.append(r'$\sigma_{%s}$' % str(i))
-            labels = labels_orbit + labels_gamma + labels_sigma
-        else:
-            labels_gamma = []
-            for i in range(self.n_datasets):
-                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
-            labels = labels_orbit + labels_gamma
 
         # Dealing with the number of rows for the plot
         if n_params % n_cols > 0:
@@ -358,9 +358,9 @@ class OrbitalParams(object):
                                  figsize=fig_size)
         for i in range(n_cols):
             for k in range(n_rows):
-                if ind < len(labels):
+                if ind < len(self.labels):
                     axes[k, i].plot(self.sampler.chain[:, :, ind].T)
-                    axes[k, i].set_ylabel(labels[ind])
+                    axes[k, i].set_ylabel(self.labels[ind])
                     ind += 1
                 else:
                     pass
@@ -369,3 +369,51 @@ class OrbitalParams(object):
             plt.show()
         else:
             plt.savefig(outfile)
+
+    # Compute samples from the emcee chains.
+    def make_samples(self, n_cut, ecc_and_omega=True, save_file=None):
+        """
+        Compute the MCMC samples from the ``emcee`` chains. The user has to
+        provide the number of steps to ignore in the beginning of the chain
+        (which correspond to the burn-in phase), compute eccentricities and
+        arguments of periapse and saving the samples to a file on disk.
+
+        Parameters
+        ----------
+        n_cut : ``int``
+            Number of steps to ignore from the burn-in phase.
+
+        ecc_and_omega : ``bool``, optional
+            If ``True``, compute the eccentricities and the arguments of
+            periapse to be saved in the samples, instead of saving the original
+            parameters sqrt(e)*cos(omega) and sqrt(e)*sin(omega). Default is
+            ``True``.
+
+        save_file : ``str`` or ``None``, optional
+            Output file to save the samples to a file on disk. If ``None``, no
+            output file is produced. Default is ``None``. Note: These files
+            are not compressed, and will be saved using ``numpy.save``; they can
+            be loaded using ``numpy.load``.
+        """
+        assert (self.sampler is not None), "The emcee sampler must be run " \
+                                           "before computing samples."
+
+        n_walkers, n_steps, n_params = np.shape(self.sampler.chain)
+
+        # Save samples by cutting the burn-in phase
+        self.samples = self.sampler.chain[:, n_cut:, :].reshape((-1, n_params))
+
+        # Compute the eccentricity (e) and the argument of periapse (omega) of
+        # the orbit if the user requested so, and save them in place of
+        # sqrt(e)*cos(omega) and sqrt(e)*sin(omega).
+        if ecc_and_omega is True:
+            ecc = (self.samples[:, 3]) ** 2 + (self.samples[:, 4]) ** 2
+            cosw = (self.samples[:, 3]) / np.sqrt(ecc)
+            sinw = (self.samples[:, 4]) / np.sqrt(ecc)
+            omega = np.degrees(np.arctan2(sinw, cosw))
+            self.samples[:, 4] = ecc
+            self.samples[:, 3] = omega
+
+        # Save samples to file if the user requested so
+        if save_file is not None:
+            np.save(file=save_file, arr=self.samples)
