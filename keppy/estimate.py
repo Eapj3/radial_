@@ -5,6 +5,8 @@ import numpy as np
 import scipy.optimize as op
 from keppy import orbit
 import emcee
+import matplotlib.pyplot as plt
+import corner
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -128,6 +130,10 @@ class OrbitalParams(object):
                 self.bounds = bounds + bounds_vz + bounds_sj
 
         self.fold = fold
+
+        # Initializing useful global variables
+        self.sampler = None
+        self.samples = None
 
     # The likelihood function
     # noinspection PyTypeChecker
@@ -294,4 +300,72 @@ class OrbitalParams(object):
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
                                         threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
-        return sampler
+        self.sampler = sampler
+
+    # Plot emcee chains
+    def plot_emcee_chains(self, outfile='chains.pdf', n_cols=2,
+                          fig_size=(12, 12)):
+        """
+        Plot the ``emcee`` chains so that the user can check for convergence or
+        chain behavior.
+
+        Parameters
+        ----------
+        outfile: ``str`` or ``None``, optional
+            Name of the output image file to be saved. If ``None``, then no
+            output file is produced, and the plot is displayed on screen.
+            Default is 'chains.pdf'.
+
+        n_cols: ``int``, optional
+            Number of columns of the plot. Default is 2.
+
+        fig_size: tuple, optional
+            Sizes of each panel of the plot, where the first element of the
+            tuple corresponds to the x-direction size, and the second element
+            corresponds to the y-direction size. Default is (12, 12).
+        """
+        assert (self.sampler is not None), "The emcee sampler must be run " \
+                                           "before platting the chains."
+        n_walkers, n_steps, n_params = np.shape(self.sampler.chain)
+
+        # Dealing with the labels of the plot
+        labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
+                        r'$\sqrt{e}\cos{\omega}$', r'$\sqrt{e}\sin{\omega}$']
+        # If the user did not use extra-noise term, no labels for sigma.
+        # Otherwise, include labels for the various sigma for each dataset.
+        if self.bounds_sj is not None:
+            labels_gamma = []
+            labels_sigma = []
+            for i in range(self.n_datasets):
+                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
+                labels_sigma.append(r'$\sigma_{%s}$' % str(i))
+            labels = labels_orbit + labels_gamma + labels_sigma
+        else:
+            labels_gamma = []
+            for i in range(self.n_datasets):
+                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
+            labels = labels_orbit + labels_gamma
+
+        # Dealing with the number of rows for the plot
+        if n_params % n_cols > 0:
+            n_rows = n_params // n_cols + 1
+        else:
+            n_rows = n_params // n_cols
+
+        # Finally Do the actual plot
+        ind = 0     # The parameter index
+        fig, axes = plt.subplots(ncols=n_cols, nrows=n_rows, sharex=True,
+                                 figsize=fig_size)
+        for i in range(n_cols):
+            for k in range(n_rows):
+                if ind < len(labels):
+                    axes[k, i].plot(self.sampler.chain[:, :, ind].T)
+                    axes[k, i].set_ylabel(labels[ind])
+                    ind += 1
+                else:
+                    pass
+            plt.xlabel('Step number')
+        if outfile is None:
+            plt.show()
+        else:
+            plt.savefig(outfile)
