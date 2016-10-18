@@ -448,3 +448,30 @@ class OrbitalParams(object):
             plt.show()
         else:
             plt.savefig(out_file)
+
+    # Compute the companion minimum mass and the semi-major axis of the orbit.
+    def compute_dynamics(self, main_body_mass=1.0):
+        """
+        Compute the mass and semi-major axis of the companion defined by the
+        orbital parameters estimated with ``emcee``.
+
+        Parameters
+        ----------
+        main_body_mass : ``float``, optional
+            The mass of the main body which the companion orbits, in units of
+            solar masses. Default is 1.0.
+        """
+        mbm = main_body_mass
+        log_2pi_grav = 11.921   # Logarithm of 2 * np.pi * G in units of
+        # km ** 3 * s ** (-2) * M_Sun ** (-1)
+        pd_ps = np.log10(8.64E4)    # Unit of time conversion factor (d to s)
+        # ``eta`` is the numerical value of the following equation
+        # period * K * (1 - e ** 2) ** (3 / 2) / 2 * pi * G / main_body_mass
+        log_eta = self.samples[:, 0] + pd_ps + self.samples[:, 1] + \
+            3. / 2 * np.log10(1. - (self.samples[:, 4]) ** 2) - log_2pi_grav
+        eta = 10 ** log_eta / mbm
+
+        # Find the zeros of the third order polynomial that relates ``msini``
+        # to ``eta``. The first zero is the physical ``msini``.
+        roots = np.array([np.roots([1, -ek, -2 * ek, -ek]) for ek in eta])
+        msini = abs(roots[:, 0])
