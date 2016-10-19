@@ -19,10 +19,14 @@ http://dan.iel.fm/emcee/current/
 """
 
 
-class OrbitalParams(object):
+# Estimate orbital parameters from radial velocity data comprising at least one
+# orbit.
+class FullOrbit(object):
     """
     A class that computes the orbital parameters of a binary system given its
-    radial velocities (and their uncertainties) in function of time.
+    radial velocities (and their uncertainties) in function of time. This class
+    is optimized for timeseries that contain at least one full or almost full
+    orbital period.
 
     Parameters
     ----------
@@ -521,3 +525,57 @@ class OrbitalParams(object):
     # Plot emcee solutions
     def plot_emcee_solutions(self):
         pass
+
+
+# Estimate orbital parameters from radial velocity data comprising only a linear
+# trend.
+class LinearTrend(object):
+    """
+    The method applied in this class is based on the partial orbits method used
+    by Wright et al. 2007, ApJ 657.
+    """
+    def __init__(self, t, rv, rv_err, param_arrays, t0, m_star, n_datasets=1):
+        assert (isinstance(n_datasets, int) and n_datasets > 0), 'n_datasets ' \
+            'must be an integer larger than 0.'
+
+        self.G = 1.328E11   # Gravitational constant in unit involving M_Sun, km
+        # and s
+        self.t = t
+        self.rv = rv
+        self.rv_err = rv_err
+        self.n_datasets = n_datasets
+        self.t0 = t0
+
+        self.log_msini = param_arrays[0]
+        self.log_period = param_arrays[1]
+        self.e = param_arrays[2]
+        self.omega = param_arrays[3]
+        self.gamma = param_arrays[4]
+
+        # Computing useful parameters
+        self.m = 10 ** self.log_msini
+        self.n = 2 * np.pi / 10 ** self.log_period
+        self.log_e = np.log10(self.e)
+        self.sqe_cosw = np.sqrt(self.e) * np.cos(self.omega)
+        self.sqe_sinw = np.sqrt(self.e) * np.sin(self.omega)
+        self.semi_a = ((self.m + m_star) * self.G / self.n ** 2) ** (1./3)
+        self.log_k = np.log10(self.m / (m_star + self.m) * self.n *
+                              self.semi_a / np.sqrt(1. - self.e ** 2))
+
+    # Compute chi-squared of fit
+    # noinspection PyTypeChecker
+    def chi_sq(self, theta):
+
+        chi_sq = 0
+        for i in range(self.n_datasets):
+            if self.n_datasets > 1:
+                n = len(self.t[i])
+            else:
+                n = len(self.t[0])
+            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
+                                        t0=theta[2], sqe_cosw=theta[3],
+                                        sqe_sinw=theta[4], vz=theta[5 + i])
+            model = system.get_rvs(ts=self.t[i], nt=n)
+            chi_sq += np.sum((self.rv[i] - model) ** 2 / model /
+                             self.rv_err[i] ** 2)
+        return chi_sq
