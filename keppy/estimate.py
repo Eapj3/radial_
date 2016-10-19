@@ -135,6 +135,7 @@ class OrbitalParams(object):
         # Initializing useful global variables
         self.sampler = None
         self.samples = None
+        self.dyn_mcmc = None
 
         # Dealing with the parameter labels for plots
         labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
@@ -475,3 +476,48 @@ class OrbitalParams(object):
         # to ``eta``. The first zero is the physical ``msini``.
         roots = np.array([np.roots([1, -ek, -2 * ek, -ek]) for ek in eta])
         msini = abs(roots[:, 0])
+
+        # Compute the semi-major axis in km and convert to AU
+        k = 10 ** self.samples[:, 0]
+        period = 10 ** self.samples[:, 1]
+        semi_a = np.sqrt(8.344E11/(2*np.pi)**2 * msini * period / k /
+                    np.sqrt(1. - (self.samples[:, 4]) ** 2))
+        semi_a /= 1.496E8
+        self.dyn_mcmc = np.array([msini, semi_a])
+        return msini, semi_a
+
+    # Print emcee results in an objective way
+    def print_emcee_results(self):
+        linear_samples = self.samples
+        linear_samples[:, 0] = 10 ** self.samples[:, 0]
+        linear_samples[:, 1] = 10 ** self.samples[:, 1]
+        labels = ['K', 'P', 't0', 'omega', 'ecc']
+        for i in range(self.n_datasets):
+            labels.append('gamma_%i' % i)
+        if self.bounds_sj is not None:
+            for i in range(self.n_datasets):
+                linear_samples[:, -1 - i] = 10 ** self.samples[:, -1 - i]
+                labels.append('addsigma_%i' % i)
+        res_mcmc = map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
+                       zip(*np.percentile(linear_samples, [16, 50, 84],
+                                          axis=0)))
+        dyn_mcmc = map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
+                       zip(*np.percentile(dyn_mcmc, [16, 50, 84],
+                                          axis=0)))
+
+        # Print results
+        for i in range(len(labels)):
+            print('%s = %.3f ^{+ %.3f}_{- %.3f}' % (labels[i],
+                                                    res_mcmc[i][0],
+                                                    res_mcmc[i][1],
+                                                    res_mcmc[i][2]))
+        print('msini = %.3f ^{+ %.3f}_{- %.3f}' % (dyn_mcmc[0][0],
+                                                   dyn_mcmc[0][1],
+                                                   dyn_mcmc[0][2]))
+        print('a = %.3f ^{+ %.3f}_{- %.3f}' % (dyn_mcmc[1][0],
+                                               dyn_mcmc[1][1],
+                                               dyn_mcmc[1][2]))
+
+    # Plot emcee solutions
+    def plot_emcee_solutions(self):
+        pass
