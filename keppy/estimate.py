@@ -8,6 +8,7 @@ import emcee
 import matplotlib
 import matplotlib.pyplot as plt
 import corner
+import numba
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -178,7 +179,6 @@ class FullOrbit(object):
             The ln of the likelihood of the signal rv being the result of a
             model with parameters theta
         """
-        # log_k, log_period, t0, w, log_e, vz = theta
         sum_like = 0
         if self.fold is True:
             time_array = self.t / (10 ** theta[1]) % 1
@@ -288,7 +288,8 @@ class FullOrbit(object):
         return lp + self.lnlike(theta)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, nthreads=1, ballsizes=1E-2):
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
+                    ballsizes=1E-2):
         """
         Calculates samples of parameters that best fit the signal rv.
 
@@ -299,6 +300,9 @@ class FullOrbit(object):
 
         nsteps : ``int``
             Number of burning-in steps
+
+        p_scale : ``float``, optional
+            The proposal scale parameter. Default is 2.0.
 
         nthreads : ``int``
             Number of threads in your machine
@@ -322,7 +326,7 @@ class FullOrbit(object):
                         for i in range(nwalkers)])
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        threads=nthreads)
+                                        a=p_scale, threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
 
@@ -467,12 +471,13 @@ class FullOrbit(object):
             solar masses. Default is 1.0.
         """
         mbm = main_body_mass
-        log_2pi_grav = 11.921   # Logarithm of 2 * np.pi * G in units of
+        k = 10 ** self.samples[:, 0]
+        period = 10 ** self.samples[:, 1] * 8.64E4
+        log_2pi_grav = 11.92138   # Logarithm of 2 * np.pi * G in units of
         # km ** 3 * s ** (-2) * M_Sun ** (-1)
-        pd_ps = np.log10(8.64E4)    # Unit of time conversion factor (d to s)
         # ``eta`` is the numerical value of the following equation
         # period * K * (1 - e ** 2) ** (3 / 2) / 2 * pi * G / main_body_mass
-        log_eta = self.samples[:, 0] + pd_ps + self.samples[:, 1] + \
+        log_eta = np.log10(period) + 3 * np.log10(k) + \
             3. / 2 * np.log10(1. - (self.samples[:, 4]) ** 2) - log_2pi_grav
         eta = 10 ** log_eta / mbm
 
@@ -482,45 +487,50 @@ class FullOrbit(object):
         msini = abs(roots[:, 0])
 
         # Compute the semi-major axis in km and convert to AU
-        k = 10 ** self.samples[:, 0]
-        period = 10 ** self.samples[:, 1]
-        semi_a = np.sqrt(8.344E11/(2*np.pi)**2 * msini * period / k /
-                    np.sqrt(1. - (self.samples[:, 4]) ** 2))
-        semi_a /= 1.496E8
+        semi_a = np.sqrt(1.328E11 / (2 * np.pi) * msini * period / k /
+                         np.sqrt(1. - self.samples[:, 4] ** 2))
+        semi_a *= 6.68458712E-9
         self.dyn_mcmc = np.array([msini, semi_a])
         return msini, semi_a
 
     # Print emcee results in an objective way
+    # noinspection PyArgumentList
     def print_emcee_results(self):
         linear_samples = self.samples
         linear_samples[:, 0] = 10 ** self.samples[:, 0]
         linear_samples[:, 1] = 10 ** self.samples[:, 1]
         labels = ['K', 'P', 't0', 'omega', 'ecc']
+        units = ['km/s', 'days', 'JD-2.45E6 days', 'deg', '']
+        dyn_units = ['M_Sun', 'AU']
         for i in range(self.n_datasets):
             labels.append('gamma_%i' % i)
         if self.bounds_sj is not None:
             for i in range(self.n_datasets):
                 linear_samples[:, -1 - i] = 10 ** self.samples[:, -1 - i]
                 labels.append('addsigma_%i' % i)
-        res_mcmc = map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
-                       zip(*np.percentile(linear_samples, [16, 50, 84],
-                                          axis=0)))
-        dyn_mcmc = map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
-                       zip(*np.percentile(dyn_mcmc, [16, 50, 84],
-                                          axis=0)))
+        k_mcmc, period_mcmc, t0_mcmc, ecc_mcmc, omega_mcmc = \
+            map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
+                zip(*np.percentile(linear_samples[:, :5], [16, 50, 84],
+                                   axis=0)))
+        orbit_mcmc = [k_mcmc, period_mcmc, t0_mcmc, ecc_mcmc, omega_mcmc]
+        msini_mcmc, semi_a_mcmc = \
+            map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
+                zip(*np.percentile(self.dyn_mcmc.T, [16, 50, 84], axis=0)))
+        dyn_mcmc = [msini_mcmc, semi_a_mcmc]
 
         # Print results
-        for i in range(len(labels)):
-            print('%s = %.3f ^{+ %.3f}_{- %.3f}' % (labels[i],
-                                                    res_mcmc[i][0],
-                                                    res_mcmc[i][1],
-                                                    res_mcmc[i][2]))
-        print('msini = %.3f ^{+ %.3f}_{- %.3f}' % (dyn_mcmc[0][0],
-                                                   dyn_mcmc[0][1],
-                                                   dyn_mcmc[0][2]))
-        print('a = %.3f ^{+ %.3f}_{- %.3f}' % (dyn_mcmc[1][0],
-                                               dyn_mcmc[1][1],
-                                               dyn_mcmc[1][2]))
+        for i in range(5):
+            print('%s = %.3f ^{+ %.3f}_{- %.3f} %s' % (labels[i],
+                                                       orbit_mcmc[i][0],
+                                                       orbit_mcmc[i][1],
+                                                       orbit_mcmc[i][2],
+                                                       units[i]))
+        print('msini = %.3f ^{+ %.3f}_{- %.3f} M_Sun' % (dyn_mcmc[0][0],
+                                                         dyn_mcmc[0][1],
+                                                         dyn_mcmc[0][2]))
+        print('a = %.3f ^{+ %.3f}_{- %.3f} AU' % (dyn_mcmc[1][0],
+                                                  dyn_mcmc[1][1],
+                                                  dyn_mcmc[1][2]))
 
     # Plot emcee solutions
     def plot_emcee_solutions(self):
