@@ -8,7 +8,11 @@ import emcee
 import matplotlib
 import matplotlib.pyplot as plt
 import corner
-import numba
+
+# Adjusting some useful matplotlib parameters
+matplotlib.rcParams.update({'font.size': 20})
+matplotlib.rc('xtick', labelsize=13)
+matplotlib.rc('ytick', labelsize=13)
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -140,7 +144,11 @@ class FullOrbit(object):
         # Initializing useful global variables
         self.sampler = None
         self.samples = None
+        self.samples_EXOFAST = None
+        self.labels_EXOFAST = None
         self.dyn_mcmc = None
+        self.params_mcmc = None
+        self.system_mcmc = None
 
         # Dealing with the parameter labels for plots
         labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
@@ -381,7 +389,7 @@ class FullOrbit(object):
             plt.savefig(outfile)
 
     # Compute samples from the emcee chains.
-    def make_samples(self, n_cut, ecc_and_omega=True, save_file=None):
+    def make_samples(self, n_cut, save_file=None):
         """
         Compute the MCMC samples from the ``emcee`` chains. The user has to
         provide the number of steps to ignore in the beginning of the chain
@@ -392,12 +400,6 @@ class FullOrbit(object):
         ----------
         n_cut : ``int``
             Number of steps to ignore from the burn-in phase.
-
-        ecc_and_omega : ``bool``, optional
-            If ``True``, compute the eccentricities and the arguments of
-            periapse to be saved in the samples, instead of saving the original
-            parameters sqrt(e)*cos(omega) and sqrt(e)*sin(omega). Default is
-            ``True``.
 
         save_file : ``str`` or ``None``, optional
             Output file to save the samples to a file on disk. If ``None``, no
@@ -415,17 +417,19 @@ class FullOrbit(object):
 
         # Compute the eccentricity (e) and the argument of periapse (omega) of
         # the orbit if the user requested so, and save them in place of
-        # sqrt(e)*cos(omega) and sqrt(e)*sin(omega).
-        if ecc_and_omega is True:
-            ecc = (self.samples[:, 3]) ** 2 + (self.samples[:, 4]) ** 2
-            cosw = (self.samples[:, 3]) / np.sqrt(ecc)
-            sinw = (self.samples[:, 4]) / np.sqrt(ecc)
-            omega = np.degrees(np.arctan2(sinw, cosw))
-            self.samples[:, 4] = ecc
-            self.samples[:, 3] = omega
-            # Also change the labels
-            self.labels[4] = r'$e$'
-            self.labels[3] = r'$\omega$'
+        # sqrt(e)*cos(omega) and sqrt(e)*sin(omega). The samples of the original
+        # parameters will be kept as samples_EXOFAST.
+        ecc = (self.samples[:, 3]) ** 2 + (self.samples[:, 4]) ** 2
+        cosw = (self.samples[:, 3]) / np.sqrt(ecc)
+        sinw = (self.samples[:, 4]) / np.sqrt(ecc)
+        omega = np.degrees(np.arctan2(sinw, cosw))
+        self.samples_EXOFAST = self.samples
+        self.samples[:, 4] = ecc
+        self.samples[:, 3] = omega
+        # Also change the labels
+        self.labels_EXOFAST = self.labels
+        self.labels[4] = r'$e$'
+        self.labels[3] = r'$\omega$'
 
         # Save samples to file if the user requested so
         if save_file is not None:
@@ -448,10 +452,6 @@ class FullOrbit(object):
         """
         assert (self.samples is not None), "The samples must be computed " \
                                            "before making the corner plot."
-        # Adjusting some useful matplotlib parameters
-        matplotlib.rcParams.update({'font.size': 20})
-        matplotlib.rc('xtick', labelsize=13)
-        matplotlib.rc('ytick', labelsize=13)
         corner.corner(self.samples, bins, labels=self.labels)
         if out_file is None:
             plt.show()
@@ -478,7 +478,7 @@ class FullOrbit(object):
         # ``eta`` is the numerical value of the following equation
         # period * K * (1 - e ** 2) ** (3 / 2) / 2 * pi * G / main_body_mass
         log_eta = np.log10(period) + 3 * np.log10(k) + \
-            3. / 2 * np.log10(1. - (self.samples[:, 4]) ** 2) - log_2pi_grav
+            3. / 2 * np.log10(1. - self.samples[:, 4] ** 2) - log_2pi_grav
         eta = 10 ** log_eta / mbm
 
         # Find the zeros of the third order polynomial that relates ``msini``
@@ -496,45 +496,88 @@ class FullOrbit(object):
     # Print emcee results in an objective way
     # noinspection PyArgumentList
     def print_emcee_results(self):
+        """
+
+        :return:
+        """
         linear_samples = self.samples
         linear_samples[:, 0] = 10 ** self.samples[:, 0]
         linear_samples[:, 1] = 10 ** self.samples[:, 1]
+
         labels = ['K', 'P', 't0', 'omega', 'ecc']
+        gamma_labels = []
+        sigma_labels = []
+
         units = ['km/s', 'days', 'JD-2.45E6 days', 'deg', '']
         dyn_units = ['M_Sun', 'AU']
+
         for i in range(self.n_datasets):
-            labels.append('gamma_%i' % i)
+            gamma_labels.append('gamma_%i' % i)
         if self.bounds_sj is not None:
             for i in range(self.n_datasets):
                 linear_samples[:, -1 - i] = 10 ** self.samples[:, -1 - i]
-                labels.append('addsigma_%i' % i)
+                sigma_labels.append('addsigma_%i' % i)
+
         k_mcmc, period_mcmc, t0_mcmc, ecc_mcmc, omega_mcmc = \
             map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
                 zip(*np.percentile(linear_samples[:, :5], [16, 50, 84],
                                    axis=0)))
-        orbit_mcmc = [k_mcmc, period_mcmc, t0_mcmc, ecc_mcmc, omega_mcmc]
+        self.params_mcmc = [k_mcmc, period_mcmc, t0_mcmc, ecc_mcmc, omega_mcmc]
+
         msini_mcmc, semi_a_mcmc = \
             map(lambda v: np.array([v[1], v[2]-v[1], v[1]-v[0]]),
                 zip(*np.percentile(self.dyn_mcmc.T, [16, 50, 84], axis=0)))
-        dyn_mcmc = [msini_mcmc, semi_a_mcmc]
+        self.system_mcmc = [msini_mcmc, semi_a_mcmc]
 
         # Print results
         for i in range(5):
             print('%s = %.3f ^{+ %.3f}_{- %.3f} %s' % (labels[i],
-                                                       orbit_mcmc[i][0],
-                                                       orbit_mcmc[i][1],
-                                                       orbit_mcmc[i][2],
+                                                       self.params_mcmc[i][0],
+                                                       self.params_mcmc[i][1],
+                                                       self.params_mcmc[i][2],
                                                        units[i]))
-        print('msini = %.3f ^{+ %.3f}_{- %.3f} M_Sun' % (dyn_mcmc[0][0],
-                                                         dyn_mcmc[0][1],
-                                                         dyn_mcmc[0][2]))
-        print('a = %.3f ^{+ %.3f}_{- %.3f} AU' % (dyn_mcmc[1][0],
-                                                  dyn_mcmc[1][1],
-                                                  dyn_mcmc[1][2]))
+        print('msini = %.3f ^{+ %.3f}_{- %.3f} M_Sun' % (self.system_mcmc[0][0],
+                                                         self.system_mcmc[0][1],
+                                                         self.system_mcmc[0][2])
+              )
+        print('a = %.3f ^{+ %.3f}_{- %.3f} AU' % (self.system_mcmc[1][0],
+                                                  self.system_mcmc[1][1],
+                                                  self.system_mcmc[1][2]))
 
     # Plot emcee solutions
-    def plot_emcee_solutions(self):
-        pass
+    def plot_folded_solutions(self, labels, fmts, n_samples=200, curve_len=1000,
+                             outfile=None):
+        """
+
+        :param labels:
+        :param fmts:
+        :param n_samples:
+        :param outfile:
+        :return:
+        """
+        ts = np.linspace(0, 1, 1000)
+        orbit_samples = self.samples[:, :5]
+
+        # Plot a random sample of curves
+        for _logK, _logT, _t0, _w, _e in \
+                orbit_samples[np.random.randint(len(orbit_samples),
+                                                size=n_samples)]:
+            orbit_est = orbit.BinarySystem(log_k=_logK, log_period=_logT,
+                                           t0=_t0, w=_w, log_e=np.log10(_e))
+            rv_est = orbit_est.get_rvs(nt=curve_len, ts=ts * 10 ** _logT)
+            plt.plot(ts, rv_est, color="k", alpha=0.02)
+
+        # Plot the best result
+        mcmc_est = orbit.BinarySystem(log_k=np.log10(self.params_mcmc[0][0]),
+                                      log_period=np.log10(
+                                          self.params_mcmc[1][0]),
+                                      t0=self.params_mcmc[2][0],
+                                      w=self.params_mcmc[3][0],
+                                      log_e=np.log10(self.params_mcmc[4][0]))
+        rv_mcmc = mcmc_est.get_rvs(nt=curve_len, ts=ts * self.params_mcmc[1][0])
+        plt.plot(ts, rv_mcmc, label="MCMC", color='purple', lw=2)
+
+        plt.show()
 
 
 # Estimate orbital parameters from radial velocity data comprising only a linear
