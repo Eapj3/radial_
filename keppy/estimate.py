@@ -500,10 +500,11 @@ class FullOrbit(object):
 
         :return:
         """
-        linear_samples = self.samples
-        linear_samples[:, 0] = 10 ** self.samples[:, 0]
-        linear_samples[:, 1] = 10 ** self.samples[:, 1]
-
+        linear_samples = np.zeros_like(self.samples)
+        for i in range(len(self.samples[0, :])):
+            linear_samples[:, i] = self.samples[:, i]
+        linear_samples[:, 0] = 10 ** linear_samples[:, 0]
+        linear_samples[:, 1] = 10 ** linear_samples[:, 1]
         labels = ['K', 'P', 't0', 'omega', 'ecc']
         gamma_labels = []
         sigma_labels = []
