@@ -589,7 +589,8 @@ class LinearTrend(object):
     The method applied in this class is based on the partial orbits method used
     by Wright et al. 2007, ApJ 657.
     """
-    def __init__(self, t, rv, rv_err, param_arrays, t0, m_star, n_datasets=1):
+    def __init__(self, t, rv, rv_err, param_arrays=None, t0=None, m_star=None,
+                 n_datasets=1):
         assert (isinstance(n_datasets, int) and n_datasets > 0), 'n_datasets ' \
             'must be an integer larger than 0.'
 
@@ -601,6 +602,7 @@ class LinearTrend(object):
         self.n_datasets = n_datasets
         self.t0 = t0
 
+        """
         self.log_msini = param_arrays[0]
         self.log_period = param_arrays[1]
         self.e = param_arrays[2]
@@ -616,10 +618,11 @@ class LinearTrend(object):
         self.semi_a = ((self.m + m_star) * self.G / self.n ** 2) ** (1./3)
         self.log_k = np.log10(self.m / (m_star + self.m) * self.n *
                               self.semi_a / np.sqrt(1. - self.e ** 2))
+        """
 
     # The RV model; for now, it only works with one dataset
     @staticmethod
-    def rv_model(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
+    def rv_model(x, log_k, log_period, t0, omega, log_e, gamma):
         """
 
         Parameters
@@ -628,45 +631,64 @@ class LinearTrend(object):
         log_k
         log_period
         t0
-        sqe_cosw
-        sqe_sinw
+        omega
+        log_e
         gamma
 
         Returns
         -------
 
         """
-        system = orbit.BinarySystem(log_k, log_period, t0, sqe_cosw=sqe_cosw,
-                                    sqe_sinw=sqe_sinw, vz=gamma)
-        rvs = system.get_rvs(t)
+        system = orbit.BinarySystem(log_k, log_period, t0, omega, log_e,
+                                    vz=gamma)
+        rvs = system.get_rvs(x)
         return rvs
 
     # Compute the grid search
-    def grid_search(self, stepsizes, ranges, fix_t0=0.0):
+    def grid_search(self, sizes, ranges, fix_t0=-20000):
 
         # Compute the grids of K and T
-        log_k_grid = np.arange(ranges[0, 0], ranges[0, 1], stepsizes[0])
-        log_p_grid = np.arange(ranges[1, 0], ranges[1, 1], stepsizes[1])
+        log_k_grid = np.linspace(ranges[0, 0], ranges[0, 1], sizes[0])
+        log_p_grid = np.linspace(ranges[1, 0], ranges[1, 1], sizes[1])
 
-        # The model
-        model = lmfit.Model(func=self.rv_model)
+        # Setup the model
+        model = lmfit.Model(self.rv_model)
 
-        # Fix t0 to 0.0
+        # Set a fixed value for t0
         model.set_param_hint('t0', value=fix_t0, vary=False)
 
-        # Set the minimum and maximum values of the constrained  orbital
-        # parameters
-        model.set_param_hint('sqe_cosw', min=-1, max=1)
-        model.set_param_hint('sqe_sinw', min=-1, max=1)
+        # Set the minima and maxima for omega and log_e
+        model.set_param_hint('omega', min=0, max=360)
+        model.set_param_hint('log_e', min=-4, max=0)
+
+        # The first guess
+        current = {'omega': 180., 'log_e': -0.1, 'gamma': 0.0}
+        best_values = []
+        chisq = []
 
         # For each fixed pair log_period and log_k, fit sqe_cosw, sqe_sinw and
         # gamma
         for lpk in log_p_grid:
             for lkk in log_k_grid:
-                # Fix K and T
+
+                # Fix log_K and log_T
                 model.set_param_hint('log_k', value=lkk, vary=False)
                 model.set_param_hint('log_period', value=lpk, vary=False)
 
+                # Set the parameters
+                pars = model.make_params(log_k=lkk, log_period=lpk,
+                                         omega=current['omega'],
+                                         log_e=current['log_e'],
+                                         gamma=current['gamma'])
                 # Perform the fit
-                result = model.fit(data=self.t, method='tnc', verbose=True)
-                result.plot()
+                result = model.fit(self.rv, pars, x=self.t)
+                print(result.fit_report())
+
+                # Update the guess with the current best values
+                current = result.best_values
+
+                # Save the fit parameters
+                best_values.append(current)
+                chisq.append(result.chisq)
+
+        return best_values, chisq
