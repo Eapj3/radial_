@@ -589,8 +589,7 @@ class LinearTrend(object):
     The method applied in this class is based on the partial orbits method used
     by Wright et al. 2007, ApJ 657.
     """
-    def __init__(self, t, rv, rv_err, param_arrays=None, t0=None, m_star=None,
-                 n_datasets=1):
+    def __init__(self, t, rv, rv_err, n_datasets=1, log_k_len=5, log_p_len=5):
         assert (isinstance(n_datasets, int) and n_datasets > 0), 'n_datasets ' \
             'must be an integer larger than 0.'
 
@@ -600,7 +599,12 @@ class LinearTrend(object):
         self.rv = rv
         self.rv_err = rv_err
         self.n_datasets = n_datasets
-        self.t0 = t0
+        self.log_k_len = log_k_len
+        self.log_p_len = log_p_len
+
+        # Initilizing useful global parameters
+        self.best_values = []
+        self.chisq = []
 
         """
         self.log_msini = param_arrays[0]
@@ -627,7 +631,7 @@ class LinearTrend(object):
 
         Parameters
         ----------
-        t
+        x
         log_k
         log_period
         t0
@@ -645,11 +649,11 @@ class LinearTrend(object):
         return rvs
 
     # Compute the grid search
-    def grid_search(self, sizes, ranges, fix_t0=-20000):
+    def grid_search(self, ranges, fix_t0=-100000, verbose=False):
 
         # Compute the grids of K and T
-        log_k_grid = np.linspace(ranges[0, 0], ranges[0, 1], sizes[0])
-        log_p_grid = np.linspace(ranges[1, 0], ranges[1, 1], sizes[1])
+        log_k_grid = np.linspace(ranges[0, 0], ranges[0, 1], self.log_k_len)
+        log_p_grid = np.linspace(ranges[1, 0], ranges[1, 1], self.log_p_len)
 
         # Setup the model
         model = lmfit.Model(self.rv_model)
@@ -663,8 +667,8 @@ class LinearTrend(object):
 
         # The first guess
         current = {'omega': 180., 'log_e': -0.1, 'gamma': 0.0}
-        best_values = []
-        chisq = []
+        self.best_values = []
+        self.chisq = []
 
         # For each fixed pair log_period and log_k, fit sqe_cosw, sqe_sinw and
         # gamma
@@ -681,14 +685,21 @@ class LinearTrend(object):
                                          log_e=current['log_e'],
                                          gamma=current['gamma'])
                 # Perform the fit
-                result = model.fit(self.rv, pars, x=self.t)
-                print(result.fit_report())
+                result = model.fit(self.rv, pars, x=self.t, weights=self.rv_err)
+
+                # Print fit report
+                if verbose is True:
+                    print(result.fit_report())
 
                 # Update the guess with the current best values
                 current = result.best_values
 
                 # Save the fit parameters
-                best_values.append(current)
-                chisq.append(result.chisq)
+                self.best_values.append(current)
+                self.chisq.append(result.chisqr)
 
-        return best_values, chisq
+    # Plot the chi-square maep
+    def plot_map(self):
+        self.chisq = np.reshape(self.chisq, [self.log_p_len, self.log_k_len])
+        plt.imshow(self.chisq, cmap='viridis')
+        plt.show()
