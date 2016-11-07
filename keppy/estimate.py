@@ -8,6 +8,7 @@ import emcee
 import matplotlib
 import matplotlib.pyplot as plt
 import corner
+import lmfit
 
 # Adjusting some useful matplotlib parameters
 matplotlib.rcParams.update({'font.size': 20})
@@ -616,20 +617,56 @@ class LinearTrend(object):
         self.log_k = np.log10(self.m / (m_star + self.m) * self.n *
                               self.semi_a / np.sqrt(1. - self.e ** 2))
 
-    # Compute chi-squared of fit
-    # noinspection PyTypeChecker
-    def chi_sq(self, theta):
+    # The RV model; for now, it only works with one dataset
+    @staticmethod
+    def rv_model(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
+        """
 
-        chi_sq = 0
-        for i in range(self.n_datasets):
-            if self.n_datasets > 1:
-                n = len(self.t[i])
-            else:
-                n = len(self.t[0])
-            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
-                                        t0=theta[2], sqe_cosw=theta[3],
-                                        sqe_sinw=theta[4], vz=theta[5 + i])
-            model = system.get_rvs(ts=self.t[i], nt=n)
-            chi_sq += np.sum((self.rv[i] - model) ** 2 / model /
-                             self.rv_err[i] ** 2)
-        return chi_sq
+        Parameters
+        ----------
+        t
+        log_k
+        log_period
+        t0
+        sqe_cosw
+        sqe_sinw
+        gamma
+
+        Returns
+        -------
+
+        """
+        system = orbit.BinarySystem(log_k, log_period, t0, sqe_cosw=sqe_cosw,
+                                    sqe_sinw=sqe_sinw, vz=gamma)
+        rvs = system.get_rvs(t)
+        return rvs
+
+    # Compute the grid search
+    def grid_search(self, stepsizes, ranges, fix_t0=0.0):
+
+        # Compute the grids of K and T
+        log_k_grid = np.arange(ranges[0, 0], ranges[0, 1], stepsizes[0])
+        log_p_grid = np.arange(ranges[1, 0], ranges[1, 1], stepsizes[1])
+
+        # The model
+        model = lmfit.Model(func=self.rv_model)
+
+        # Fix t0 to 0.0
+        model.set_param_hint('t0', value=fix_t0, vary=False)
+
+        # Set the minimum and maximum values of the constrained  orbital
+        # parameters
+        model.set_param_hint('sqe_cosw', min=-1, max=1)
+        model.set_param_hint('sqe_sinw', min=-1, max=1)
+
+        # For each fixed pair log_period and log_k, fit sqe_cosw, sqe_sinw and
+        # gamma
+        for lpk in log_p_grid:
+            for lkk in log_k_grid:
+                # Fix K and T
+                model.set_param_hint('log_k', value=lkk, vary=False)
+                model.set_param_hint('log_period', value=lpk, vary=False)
+
+                # Perform the fit
+                result = model.fit(data=self.t, method='tnc', verbose=True)
+                result.plot()
