@@ -605,6 +605,8 @@ class LinearTrend(object):
         # Initilizing useful global parameters
         self.best_values = []
         self.chisq = []
+        self.log_k_list = None
+        self.log_p_list = None
 
         """
         self.log_msini = param_arrays[0]
@@ -649,25 +651,28 @@ class LinearTrend(object):
         return rvs
 
     # Compute the grid search
-    def grid_search(self, ranges, fix_t0=-100000, verbose=False):
+    def grid_search(self, ranges, fix_t0=-500000, verbose=False):
 
         # Compute the grids of K and T
         log_k_grid = np.linspace(ranges[0, 0], ranges[0, 1], self.log_k_len)
         log_p_grid = np.linspace(ranges[1, 0], ranges[1, 1], self.log_p_len)
+        self.log_k_list = log_k_grid
+        self.log_p_list = log_p_grid
 
         # Setup the model
         model = lmfit.Model(self.rv_model)
 
         # Set a fixed value for t0
-        model.set_param_hint('t0', value=fix_t0, vary=False)
+        #model.set_param_hint('t0', value=fix_t0, vary=False)
 
         # Set the minima and maxima for omega and log_e
         model.set_param_hint('omega', min=0, max=360)
-        model.set_param_hint('log_e', min=-4, max=0)
+        model.set_param_hint('log_e', min=-4, max=-0.0001)
 
         # The first guess
-        current = {'omega': 180., 'log_e': -0.1, 'gamma': 0.0}
-        self.best_values = []
+        current = {'t0': 0., 'omega': 180., 'log_e': -0.1, 'gamma': 0.0}
+        self.best_values = {'log_k': [], 'log_period': [], 't0': [],
+                            'omega': [], 'log_e': []}
         self.chisq = []
 
         # For each fixed pair log_period and log_k, fit sqe_cosw, sqe_sinw and
@@ -681,11 +686,12 @@ class LinearTrend(object):
 
                 # Set the parameters
                 pars = model.make_params(log_k=lkk, log_period=lpk,
+                                         t0=current['t0'],
                                          omega=current['omega'],
                                          log_e=current['log_e'],
                                          gamma=current['gamma'])
                 # Perform the fit
-                result = model.fit(self.rv, pars, x=self.t, weights=self.rv_err)
+                result = model.fit(self.rv, pars, x=self.t)
 
                 # Print fit report
                 if verbose is True:
@@ -694,12 +700,47 @@ class LinearTrend(object):
                 # Update the guess with the current best values
                 current = result.best_values
 
+                # If the current lkk is the first on the grid, save the
+                # best_values to be used in the next lpk to save estimation time
+                if lkk == log_k_grid[0]:
+                    next_lpk = result.best_values
+
                 # Save the fit parameters
-                self.best_values.append(current)
-                self.chisq.append(result.chisqr)
+                self.best_values['log_k'].append(current['log_k'])
+                self.best_values['log_period'].append(current['log_period'])
+                self.best_values['t0'].append(current['t0'])
+                self.best_values['omega'].append(current['omega'])
+                self.best_values['log_e'].append(current['log_e'])
+                self.chisq.append(np.log10(result.chisqr))
+
+            # Set current to next_lpk when going to the next lpk
+            current = next_lpk
+
+        np.save('62039_params.npy', np.array(self.best_values))
+        np.save('62039_chisqr.npy', np.array(self.chisq))
 
     # Plot the chi-square maep
-    def plot_map(self):
+    def plot_map(self, chisq_filename=None, params_filename=None):
+
+        if chisq_filename is not None:
+            chisq_array = np.load(chisq_filename)
+            self.chisq = chisq_array
+        """
+        if params_filename is not None:
+            params_array = np.load(params_filename)
+            self.best_values = params_array
+
+        print(self.best_values)
+
+        log_k = np.array(self.best_values['log_k'])
+        log_period = np.array(self.best_values['log_period'])
+        t0 = np.array(self.best_values['t0'])
+        omega = np.array(self.best_values['omega'])
+        log_e = np.array(self.best_values['log_e'])
+
+        print(np.shape(log_k))
+        """
         self.chisq = np.reshape(self.chisq, [self.log_p_len, self.log_k_len])
-        plt.imshow(self.chisq, cmap='viridis')
+        plt.contourf(self.log_k_list, self.log_p_list, self.chisq, cmap='bone', origin='lower')
+        plt.colorbar()
         plt.show()
