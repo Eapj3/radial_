@@ -169,6 +169,11 @@ class FullOrbit(object):
                 labels_gamma.append(r'$\gamma_{%s}$' % str(i))
             self.labels = labels_orbit + labels_gamma
 
+    # TODO: Work on a lmfit orbital parameters fit.
+    def lmfit_orbit(self):
+        pass
+    #    def rv_model(x, log_k, log_period, t0, omega, log_e, **kwargs):
+
     # The likelihood function
     # noinspection PyTypeChecker
     def lnlike(self, theta):
