@@ -1,12 +1,4 @@
 # keppy
 A pure Python code for estimating radial velocities of stars with a massive companion.
 
-Features
------------
-
-* Calculates the radial velocities of a star given a set of parameters
-
-Issues
------------
-
-* None at the moment.
+The newest version 0.3 uses ``lmfit`` to compute the best solution for orbital parameters of binary stars, and has a more streamlined and easier to use setup.

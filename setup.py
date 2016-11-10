@@ -15,7 +15,7 @@ if sys.argv[-1] == "publish":
 
 setup(
     name="keppy",
-    version="0.2a",
+    version="0.3a",
     author="Leonardo dos Santos",
     author_email="ldsantos@uchicago.edu",
     packages=["keppy"],
