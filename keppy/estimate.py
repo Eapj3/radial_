@@ -81,9 +81,8 @@ class FullOrbit(object):
         velocities. If False, analysis is performed on the given time array.
         Default is False.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds_vz, bounds_sj=None,
-                 bounds=((-4, 4), (-4, 4), (0, 10000), (-1, 1), (-1, 1)),
-                 n_datasets=1, fold=False):
+    def __init__(self, t, rv, rv_err, guess, bounds=None, n_datasets=1,
+                 parametrization=None, use_add_sigma=False):
 
         if isinstance(n_datasets, int) is False:
             raise TypeError('n_datasets must be int')
@@ -92,88 +91,196 @@ class FullOrbit(object):
         else:
             self.n_datasets = n_datasets
 
-        # If user does not want to add extra noise term parameters, bounds_sj
-        # must be set to ``None``.
-        self.bounds_sj = bounds_sj
-        if self.bounds_sj is None:
-            if self.n_datasets == 1:
-                self.t = t
-                self.rv = rv
-                self.rv_err = rv_err
-                if len(guess) != 5 + self.n_datasets:
-                    raise ValueError('guess must have a length equal to 5 + '
-                                     'n_datasets')
-                else:
-                    self.guess = guess
-                self.bounds = bounds + (bounds_vz,)
-            else:
-                self.t = t
-                self.rv = rv
-                self.rv_err = rv_err
-                if len(guess) != 5 + self.n_datasets:
-                    raise ValueError('guess must have a length equal to 5 + '
-                                     'n_datasets')
-                else:
-                    self.guess = guess
-                self.bounds = bounds + bounds_vz
-        # If user wants to add extra noise term parameters, then bounds_sj must
-        # not be ``None``.
+        self.t = t
+        self.rv = rv
+        self.rv_err = rv_err
+        self.use_add_sigma = use_add_sigma
+
+        # Setting the parametrization option
+        if parametrization is None:
+            self.parametrization = 'mc10'
         else:
-            if self.n_datasets == 1:
-                self.t = t
-                self.rv = rv
-                self.rv_err = rv_err
-                if len(guess) != 5 + 2 * self.n_datasets:
-                    raise ValueError('guess must have a length equal to 5 + '
-                                     '2 * n_datasets')
-                else:
-                    self.guess = guess
-                self.bounds = bounds + (bounds_vz,) + (bounds_sj,)
-            else:
-                self.t = t
-                self.rv = rv
-                self.rv_err = rv_err
-                if len(guess) != 5 + 2 * self.n_datasets:
-                    raise ValueError('guess must have a length equal to 5 + '
-                                     '2 * n_datasets')
-                else:
-                    self.guess = guess
-                self.bounds = bounds + bounds_vz + bounds_sj
+            self.parametrization = parametrization
 
-        self.fold = fold
-
-        # Initializing useful global variables
-        self.sampler = None
-        self.samples = None
-        self.samples_EXOFAST = None
-        self.labels_EXOFAST = None
-        self.dyn_mcmc = None
-        self.params_mcmc = None
-        self.system_mcmc = None
-
-        # Dealing with the parameter labels for plots
-        labels_orbit = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
-                        r'$\sqrt{e}\cos{\omega}$', r'$\sqrt{e}\sin{\omega}$']
-        # If the user did not use extra-noise term, no labels for sigma.
-        # Otherwise, include labels for the various sigma for each dataset.
-        if self.bounds_sj is not None:
-            labels_gamma = []
-            labels_sigma = []
-            for i in range(self.n_datasets):
-                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
-                labels_sigma.append(r'$\sigma_{%s}$' % str(i))
-            self.labels = labels_orbit + labels_gamma + labels_sigma
+        # Setting the parameter keywords and the bounds
+        self.keys = ['log_k', 'log_period', 't0']
+        if self.parametrization == 'mc10':
+            self.keys.append('omega')
+            self.keys.append('log_e')
+        elif self.parametrization == 'exofast':
+            self.keys.append('sqe_cosw')
+            self.keys.append('sqe_sinw')
+        if self.n_datasets == 1:
+            self.keys.append('gamma')
+            if self.use_add_sigma is True:
+                self.keys.append('sigma')
         else:
-            labels_gamma = []
             for i in range(self.n_datasets):
-                labels_gamma.append(r'$\gamma_{%s}$' % str(i))
-            self.labels = labels_orbit + labels_gamma
+                self.keys.append('gamma_{}'.format(i))
+            if self.use_add_sigma is True:
+                for i in range(self.n_datasets):
+                    self.keys.append('sigma_{}'.format(i))
 
-    # TODO: Work on a lmfit orbital parameters fit.
-    def lmfit_orbit(self):
-        pass
-    #    def rv_model(x, log_k, log_period, t0, omega, log_e, **kwargs):
+        # The guess dict
+        self.guess = {}
+        for i in range(len(self.keys)):
+            self.guess[self.keys[i]] = guess[i]
 
+        # Setting the orbital parameter bounds
+        self.bounds = {}
+        for key in self.keys:
+            self.bounds[key] = None
+        if bounds is not None:
+            for key in self.keys:
+                try:
+                    self.bounds[key] = bounds[key]
+                except KeyError:
+                    pass
+        else:
+            pass
+
+    # The RV model from Murray & Correia 2010
+    @staticmethod
+    def rv_model_mc10(t, log_k, log_period, t0, omega, log_e, gamma):
+        """
+
+        Parameters
+        ----------
+        t
+        log_k
+        log_period
+        t0
+        omega
+        log_e
+        gamma
+
+        Returns
+        -------
+
+        """
+        system = orbit.BinarySystem(log_k, log_period, t0, omega, log_e,
+                                    vz=gamma)
+        rvs = system.get_rvs(t)
+        return rvs
+
+    # The RV model from EXOFAST
+    @staticmethod
+    def rv_model_exofast(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
+        """
+
+        Parameters
+        ----------
+        t
+        log_k
+        log_period
+        t0
+        sqe_cosw
+        sqe_sinw
+        gamma
+
+        Returns
+        -------
+
+        """
+        system = orbit.BinarySystem(log_k, log_period, t0, sqe_cosw, sqe_sinw,
+                                    vz=gamma)
+        rvs = system.get_rvs(t)
+        return rvs
+
+    # The log-likelihood
+    def lnlike(self, theta):
+        """
+
+        Parameters
+        ----------
+        theta
+        keys
+
+        Returns
+        -------
+
+        """
+        v = theta.valuesdict()
+        sum_res = 0
+        for i in range(self.n_datasets):
+
+            # Compute the RVs using the appropriate model
+            if self.parametrization == 'mc10':
+                rvs = self.rv_model_mc10(self.t[i], v[self.keys[0]],
+                                         v[self.keys[1]], v[self.keys[2]],
+                                         v[self.keys[3]], v[self.keys[4]],
+                                         v[self.keys[5 + i]])
+            elif self.parametrization == 'exofast':
+                rvs = self.rv_model_exofast(self.t[i], v[self.keys[0]],
+                                            v[self.keys[1]], v[self.keys[2]],
+                                            v[self.keys[3]], v[self.keys[4]],
+                                            v[self.keys[5 + i]])
+
+            # If user wants to estimate additional sigma
+            if self.use_add_sigma is False:
+                inv_sigma2 = 1. / (self.rv_err[i] ** 2)
+            elif self.use_add_sigma is True:
+                log_sigma_j = np.log10(theta[self.keys[5 +
+                                                       self.n_datasets + i]])
+                inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j)
+                                   ** 2)
+
+            # The log-likelihood
+            sum_res += np.sum((self.rv[i] - rvs) ** 2 * inv_sigma2 +
+                               np.log(2. * np.pi / inv_sigma2))
+        return sum_res
+
+    # Estimation using lmfit
+    def lmfit_orbit(self, fix_param=None):
+        """
+
+        Parameters
+        ----------
+        fix_param : dict
+
+        Returns
+        -------
+
+        """
+
+        vary = {}
+        for key in self.keys:
+            vary[key] = True
+
+        if fix_param is not None:
+            for key in self.keys:
+                try:
+                    vary[key] = fix_param[key]
+                except KeyError:
+                    pass
+
+        # The default bounds
+        default_bounds = {'log_k': (-4, 3), 'log_period': (-4, 5),
+                          't0': (0, 10000), 'omega': (0, 360),
+                          'log_e': (-4, -0.0001), 'sqe_cosw': (-1, 1),
+                          'sqe_sinw': (-1, 1), 'gamma': (-10, 10),
+                          'sigma': (1E-4, 5E-1)}
+        for i in range(self.n_datasets):
+            default_bounds['gamma_{}'.format(i)] = default_bounds['gamma']
+            default_bounds['sigma_{}'.format(i)] = default_bounds['sigma']
+
+        params = lmfit.Parameters()
+
+        for key in self.keys:
+            if self.bounds[key] is None:
+                params.add(key, self.guess[key], vary=vary[key],
+                           min=default_bounds[key][0],
+                           max=default_bounds[key][1])
+            else:
+                params.add(key, self.guess[key], vary=vary[key],
+                           min=self.bounds[key][0],
+                           max=self.bounds[key][1])
+
+        # Perform minimization
+        mi = lmfit.minimize(self.lnlike, params, method='Nelder')
+        lmfit.printfuncs.report_fit(mi.params, min_correl=0.5)
+
+'''
     # The likelihood function
     # noinspection PyTypeChecker
     def lnlike(self, theta):
@@ -725,27 +832,29 @@ class LinearTrend(object):
         np.save('62039_chisqr.npy', np.array(self.chisq))
 
     # Plot the chi-square maep
-    def plot_map(self, chisq_filename=None, params_filename=None):
+    def plot_map(self, chisq_filename=None, params_filename=None, ranges=None):
 
         if chisq_filename is not None:
             chisq_array = np.load(chisq_filename)
             self.chisq = chisq_array
-        """
-        if params_filename is not None:
-            params_array = np.load(params_filename)
-            self.best_values = params_array
 
-        print(self.best_values)
+        #if params_filename is not None:
+        #    params_array = np.load(params_filename)
+        #    self.best_values = params_array
 
-        log_k = np.array(self.best_values['log_k'])
-        log_period = np.array(self.best_values['log_period'])
-        t0 = np.array(self.best_values['t0'])
-        omega = np.array(self.best_values['omega'])
-        log_e = np.array(self.best_values['log_e'])
+        log_k_grid = np.linspace(ranges[0, 0], ranges[0, 1], self.log_k_len)
+        log_p_grid = np.linspace(ranges[1, 0], ranges[1, 1], self.log_p_len)
+        self.log_k_list = log_k_grid
+        self.log_p_list = log_p_grid
 
-        print(np.shape(log_k))
-        """
+        #log_k = np.array(self.best_values['log_k'])
+        #log_period = np.array(self.best_values['log_period'])
+        #t0 = np.array(self.best_values['t0'])
+        #omega = np.array(self.best_values['omega'])
+        #log_e = np.array(self.best_values['log_e'])
+
         self.chisq = np.reshape(self.chisq, [self.log_p_len, self.log_k_len])
-        plt.contourf(self.log_k_list, self.log_p_list, self.chisq, cmap='bone', origin='lower')
+        plt.contourf(self.log_p_list, self.log_k_list, self.chisq.T, cmap='bone', origin='lower')
         plt.colorbar()
         plt.show()
+'''
