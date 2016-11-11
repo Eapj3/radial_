@@ -4,6 +4,7 @@
 import numpy as np
 from keppy import orbit, dataset
 import matplotlib.pyplot as plt
+import matplotlib.markers as mrk
 import lmfit
 import astropy.units as u
 
@@ -50,7 +51,7 @@ class FullOrbit(object):
         omega=180 deg, ecc=0.1, sqe_cosw=0, sqe_sinw=0, gamma=0 km/s,
         sigma=0.001 km/s.
 
-    bounds : ``dict``, optional
+    bounds : ``dict`` or ``None``, optional
         Bounds of the parameter search, passed as a ``tuple`` for each
         parameter. The ``dict`` keywords must match the names of the parameters.
         These names are: 'k', 'period', 't0', 'omega', 'ecc',
@@ -153,6 +154,90 @@ class FullOrbit(object):
 
         # Initializing useful global variables
         self.lmfit_result = None
+
+    # Plot the data sets
+    def plot_ds(self, rv_unit=u.km / u.s, t_unit=u.d, legend_loc=None,
+                symbols=None, plot_guess=False, plot_res=False):
+        """
+        Plot the data sets.
+
+        Parameters
+        ----------
+        rv_unit : ``astropy.units``, optional
+            Radial velocity unit to be used in the plot. Default is km / s.
+
+        t_unit : ``astropy.units``, optional
+            Time unit to be used in the plot. Default is days.
+
+        legend_loc : ``int`` or ``None``, optional
+            Location of the legend. If ``None``, use the default from
+            ``matplotlib``. Default is ``None``.
+
+        symbols : sequence or ``None``, optional
+            List of symbols for each data set in the plot. If ``None``, use
+            the default list from ``matplotlib`` markers. Default is ``None``.
+
+        plot_guess : ``bool``, optional
+            If ``True``, also plots the guess as a black curve, and the RVs of
+            each data set is shifted by its respective gamma value.
+
+        plot_res : ``bool``, optional
+            If ``True``, also plot the residuals of guess fit. Can only be used
+            if ``plot_guess`` is ``True``. Default is ``False``.
+        """
+        # Use matplotlib's default symbols if ``None`` is passed.
+        if symbols is None:
+            markers = mrk.MarkerStyle()
+            symbols = markers.filled_markers
+
+        for i in range(self.n_ds):
+            if plot_guess is True:
+                # First we figure out the bounds of the plot
+                t_min = min([min(tk.to(t_unit)) for tk in self.t]).value
+                t_max = max([max(tk.to(t_unit)) for tk in self.t]).value
+                t_guess = np.linspace(t_min, t_max, 1000) * t_unit
+
+                # Compute the radial velocities for the guess
+                try:
+                    system = orbit.BinarySystem(k=self.guess['k'],
+                                                period=self.guess['period'],
+                                                t0=self.guess['t0'],
+                                                omega=self.guess['omega'],
+                                                ecc=self.guess['ecc'],
+                                                gamma=0)
+                except KeyError:
+                    system = orbit.BinarySystem(k=self.guess['k'],
+                                                period=self.guess['period'],
+                                                t0=self.guess['t0'],
+                                                sqe_cosw=self.guess['sqe_cosw'],
+                                                sqe_sinw=self.guess['sqe_sinw'],
+                                                gamma=0)
+                rv_guess = system.get_rvs(ts=t_guess)
+
+                # Shift the radial velocities with the provided gamma
+                if self.n_ds > 1:
+                    rvs = self.rv[i] - self.guess['gamma_{}'.format(i)]
+                else:
+                    rvs = self.rv[i] - self.guess['gamma']
+
+                # And finally plot the data and the curve
+                plt.errorbar(self.t[i].to(t_unit).value, rvs.to(rv_unit).value,
+                             yerr=self.rv_unc[i].to(rv_unit).value,
+                             fmt=symbols[i], label=self.meta[i]['Instrument'])
+                plt.plot(t_guess.to(t_unit).value, rv_guess.to(rv_unit).value,
+                         color='k')
+            else:
+                plt.errorbar(self.t[i].to(t_unit).value,
+                             self.rv[i].to(rv_unit).value,
+                             yerr=self.rv_unc[i].to(rv_unit).value,
+                             fmt=symbols[i], label=self.meta[i]['Instrument'])
+
+        # Show the plot
+        plt.xlabel('Time ({})'.format(t_unit))
+        plt.ylabel('Radial velocities ({})'.format(rv_unit))
+        plt.title('{}'.format(self.meta[0]['Target']))
+        plt.legend(loc=legend_loc, numpoints=1)
+        plt.show()
 
     # The RV model from Murray & Correia 2010
     @staticmethod
