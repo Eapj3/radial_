@@ -66,7 +66,8 @@ class BinarySystem(object):
                  sqe_sinw=None, gamma=0, work_units=None):
 
         if work_units is None:
-            self.work_units = {'velocity': u.km / u.s, 'time': u.d, 'angle': u.deg}
+            self.work_units = {'velocity': u.km / u.s, 'time': u.d,
+                               'angle': u.deg}
 
         if omega is None or ecc is None:
             if sqe_cosw is None or sqe_sinw is None:
