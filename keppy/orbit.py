@@ -4,6 +4,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import numpy as np
+import astropy.units as u
 import scipy.optimize as sp
 
 """
@@ -21,76 +22,97 @@ class BinarySystem(object):
 
     Parameters
     ----------
-    log_k : scalar
-        Natural logarithm of the radial velocity semi-amplitude K [km/s]
+    k : scalar or ``astropy.units.Quantity``
+        The radial velocity semi-amplitude K (velocity unit). If passed as
+        scalar, assumes unit of km / s.
 
-    log_period : scalar
-        Natural logarithm of the orbital period [days]
+    period : scalar or ``astropy.units.Quantity``
+        The orbital period (time unit). If passed as scalar, assumes unit of
+        days.
 
-    t0 : scalar
-        Time of pariastron passage [JD - 2.45E6 days]
+    t0 : scalar or ``astropy.units.Quantity``
+        Time of pariastron passage (time unit). If passed as scalar, assumes
+        unit of days.
 
-    w : scalar or ``None``, optional
+    omega : scalar, ``astropy.units.Quantity`` or ``None``, optional
         Argument of periapse [degrees]. If ``None``, both ``sqe_cosw`` and
-        ``sqe_sinw`` will be required. Default is ``None``.
+        ``sqe_sinw`` will be required. If passed as scalar, assumes unit of
+        degrees. Default is ``None``.
 
-    log_e : scalar or ``None``, optional
-        Natural logarithm of the eccentricity. If ``None``, both ``sqe_cosw``
-        and ``sqe_sinw`` will be required. Default is ``None``.
+    ecc : scalar or ``None``, optional
+        Eccentricity of the orbit. If ``None``, both ``sqe_cosw`` and
+        ``sqe_sinw`` will be required. Default is ``None``.
 
     sqe_cosw : scalar or ``None``, optional
         The square root of the eccentricity multiplied by the cosine of the
-        argument of periapse. If ``None``, both ``w`` and ``log_e`` will be
+        argument of periapse. If ``None``, both ``omega`` and ``ecc`` will be
         required. Default is ``None``.
 
     sqe_sinw : scalar or ``None``, optional
         The square root of the eccentricity multiplied by the sine of the
-        argument of periapse. If ``None``, both ``w`` and ``log_e`` will be
+        argument of periapse. If ``None``, both ``omega`` and ``ecc`` will be
         required. Default is ``None``.
 
-    vz : scalar
-        Proper motion of the barycenter [km/s]
+    gamma : scalar or ``astropy.units.Quantity``, optional
+        Proper motion of the barycenter (velocity unit). If passed as scalar,
+        assumes unit km / s. Default is 0.
     """
-    def __init__(self, log_k, log_period, t0, w=None, log_e=None, sqe_cosw=None,
-                 sqe_sinw=None, vz=0.0):
+    def __init__(self, k, period, t0, omega=None, ecc=None, sqe_cosw=None,
+                 sqe_sinw=None, gamma=0):
 
-        if w is None or log_e is None:
+        if omega is None or ecc is None:
             if sqe_cosw is None or sqe_sinw is None:
                 raise ValueError('Either of these pairs have to be provided: '
-                                 '(w, log_e) or (sqe_cosw, sqe_sinw)')
+                                 '(omega, ecc) or (sqe_cosw, sqe_sinw)')
             else:
-                self.e = sqe_sinw ** 2 + sqe_cosw ** 2
-                self.w_rad = np.arctan2(sqe_sinw, sqe_cosw)
+                self.ecc = sqe_sinw ** 2 + sqe_cosw ** 2
+                self.omega = np.arctan2(sqe_sinw, sqe_cosw)
         else:
-            self.e = 10 ** log_e
-            self.w_rad = w * np.pi / 180.
+            self.ecc = ecc
+            if isinstance(omega, u.Quantity):
+                self.omega = omega
+            else:
+                self.omega = omega * u.deg
 
-        self.k = 10 ** log_k
-        self.period = 10 ** log_period
-        self.t0 = t0
-        self.vz = vz
+        if isinstance(k, u.Quantity):
+            self.k = k
+        else:
+            self.k = k * u.km / u.s
+        if isinstance(period, u.Quantity):
+            self.period = period
+        else:
+            self.period = period * u.d
+        if isinstance(t0, u.Quantity):
+            self.t0 = t0
+        else:
+            self.t0 = t0 * u.d
+        if isinstance(gamma, u.Quantity):
+            self.gamma = gamma
+        else:
+            self.gamma = gamma * u.km / u.s
 
-        if self.e > 1:
-            raise ValueError('Keplerian orbits are ellipses, therefore e <= 1')
+        if self.ecc > 1:
+            raise ValueError('Keplerian orbits are ellipses, therefore ecc <= '
+                             '1')
 
     # Compute Eq. 65
-    def vr(self, f):
+    def rv_eq(self, f):
         """
         The radial velocities equation.
 
         Parameters
         ----------
-        f : scalar or `numpy.ndarray`
-            True anomaly [radians]
+        f : ``astropy.unit.Quantity``
+            True anomaly (unit of angle).
 
         Returns
         -------
-        _rvs : scalar or array
-            Radial velocities [km/s]
+        rvs : ``astropy.unit.Quantity``
+            Radial velocity
         """
-        rvs = self.vz + self.k * (np.cos(self.w_rad + f) + self.e *
-                                  np.cos(self.w_rad))
-        return rvs
+        rv = self.gamma + self.k * (np.cos(self.omega + f) + self.ecc *
+                                    np.cos(self.omega))
+        return rv
 
     # Calculates the Kepler equation (Eq. 41)
     def kep_eq(self, e_ano, m_ano):
@@ -99,62 +121,47 @@ class BinarySystem(object):
 
         Parameters
         ----------
-        e_ano : scalar or array
-            Eccentric anomaly [radians]
+        e_ano : ``astropy.unit.Quantity``
+            Eccentric anomaly (unit of angle)
 
-        m_ano : scalar or array
-            Mean anomaly [radians]
+        m_ano : ``astropy.unit.Quantity``
+            Mean anomaly (unit of angle)
 
         Returns
         -------
-        kep: scalar or array
+        kep: ``astropy.unit.Quantity``
             Value of E-e*sin(E)-M
         """
-        kep = e_ano - self.e * np.sin(e_ano) - m_ano
+        kep = e_ano - self.ecc * np.sin(e_ano * u.rad) - m_ano
         return kep
 
     # Calculates the radial velocities for given orbital parameters
-    def get_rvs(self, ts=np.linspace(0, 1, 1000), nt=1000, fold=False):
+    def get_rvs(self, ts):
         """
         Computes the radial velocity given the orbital parameters.
 
         Parameters
         ----------
-        ts : scalar or array
-            Time [d]
+        ts : ``astropy.unit.Quantity``
+            Time
 
         nt : int
             Number of points for one period. Default=1000.
 
-        fold : bool, optional
-            Switch to phase-fold the radial velocities. Default is False.
-
         Returns
         -------
-        rvs : scalar or array
-            Radial velocities [km/s]
+        rvs : ``astropy.unit.Quantity``
+            Radial velocities
         """
-        # Calculating RVs for one period
-        if fold is True:
-            t = np.linspace(0, 1, nt)
-            m_ano = 2 * np.pi * t
-        else:
-            t = np.linspace(self.t0, self.t0 + self.period, nt)   # Time (days)
-            m_ano = 2 * np.pi / self.period * (t - self.t0)       # Mean anomaly
+        m_ano = 2 * np.pi / self.period * (ts - self.t0)  # Mean anomaly
         e_ano = np.array([sp.newton(func=self.kep_eq, x0=mk, args=(mk,))
-                          for mk in m_ano])                  # Eccentric anomaly
+                          for mk in m_ano]) * u.rad       # Eccentric anomaly
         # Computing the true anomaly
-        f = 2 * np.arctan2(np.sqrt(1. + self.e) * np.sin(e_ano / 2),
-                           np.sqrt(1. - self.e) * np.cos(e_ano / 2))
+        f = 2 * np.arctan2(np.sqrt(1. + self.ecc) * np.sin(e_ano / 2),
+                           np.sqrt(1. - self.ecc) * np.cos(e_ano / 2))
         # Why do we compute the true anomaly in this weird way? Because
         # arc-cosine is degenerate in the interval 0-360 degrees.
-
-        rv = np.array([self.vr(fk) for fk in f])      # RVs (km/s)
-        # Calculating RVs in the specified time interval
-        if fold is True:
-            rvs = np.interp(ts, t, rv, period=1)
-        else:
-            rvs = np.interp(ts, t, rv, period=self.period)
+        rvs = self.rv_eq(f)
         return rvs
 
 
@@ -164,23 +171,25 @@ if __name__ == '__main__':
 
     print('---------------------------------------')
     print('Starting test of keppy.orbit\n')
-    t_sim = np.linspace(0, 1, 1000)
+    t_sim = np.linspace(3000, 5000, 1000) * u.d
     start_time = time.time()  # We use this to measure the computation time
 
     # First, we create an instance of the system HIP156846
-    HIP156846 = BinarySystem(log_k=np.log10(0.464),
-                             log_period=np.log10(359.51),
-                             t0=3998.1,
-                             sqe_cosw=np.sqrt(0.847) * np.cos(np.radians(52.2)),
-                             sqe_sinw=np.sqrt(0.847) * np.sin(np.radians(52.2)),
-                             vz=-68.54)
+    HIP156846 = BinarySystem(k=0.464 * u.m / u.s,
+                             period=359.51 * u.d,
+                             t0=3998.1 * u.d,
+                             #omega=52.2 * u.deg,
+                             #ecc=0.847,
+                             sqe_cosw=np.sqrt(0.847) * np.cos(52.2 * u.deg),
+                             sqe_sinw=np.sqrt(0.847) * np.sin(52.2 * u.deg),
+                             gamma=-68.54 * u.km / u.s)
 
     # The RVs are computed simply by running get_rvs()
-    _rvs = HIP156846.get_rvs(nt=1000, ts=t_sim, fold=True)
+    _rvs = HIP156846.get_rvs(ts=t_sim)
     print('RV calculation took %.4f seconds' % (time.time() - start_time))
 
     # Plotting results
-    plt.plot(t_sim, _rvs)
-    plt.xlabel('JD - 2450000.0 (days)')
-    plt.ylabel('RV (km/s)')
+    plt.plot(t_sim.value, _rvs.value)
+    plt.xlabel('Time ({})'.format(t_sim.unit))
+    plt.ylabel('RV ({})'.format(_rvs.unit))
     plt.show()
