@@ -2,18 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-# import scipy.optimize as op
 from keppy import orbit, dataset
-# import emcee
-# import matplotlib
 import matplotlib.pyplot as plt
-# import corner
 import lmfit
-
-# Adjusting some useful matplotlib parameters
-# matplotlib.rcParams.update({'font.size': 20})
-# matplotlib.rc('xtick', labelsize=13)
-# matplotlib.rc('ytick', labelsize=13)
+import astropy.units as u
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -49,25 +41,27 @@ class FullOrbit(object):
         5 orbital parameters + 2 * N, if use_add_sigma is ``True``, where N is
         the number of data sets. If passed as ``dict``, they keywords must be
         matched to the names of the parameters to be fit. These names are:
-        'log_k', 'log_period', 't0', 'omega', 'log_e', 'sqe_cosw', 'sqe_sinw',
+        'k', 'period', 't0', 'omega', 'ecc', 'sqe_cosw', 'sqe_sinw',
         'gamma', 'sigma', 'gamma_X', 'sigma_X', where 'X' is the index of the
         data set; 'omega' and 'log_e' are used in the 'mc10' parametrization;
         'sqe_cosw' and 'sqe_sinw' are used in the 'exofast' parametrization. If
         passed as ``dict`` and parameters are missing, the code uses the
-        following default values: log_k=-1, log_period=3, t0=5000, omega=180,
-        log_e=-1, sqe_cosw=0, sqe_sinw=0, gamma=0, sigma=0.001.
+        following default values: k=0.1 km/s, period=1000 days, t0=5000 days,
+        omega=180 deg, ecc=0.1, sqe_cosw=0, sqe_sinw=0, gamma=0 km/s,
+        sigma=0.001 km/s.
 
     bounds : ``dict``, optional
         Bounds of the parameter search, passed as a ``tuple`` for each
         parameter. The ``dict`` keywords must match the names of the parameters.
-        These names are: 'log_k', 'log_period', 't0', 'omega', 'log_e',
+        These names are: 'k', 'period', 't0', 'omega', 'ecc',
         'sqe_cosw', 'sqe_sinw', 'gamma', 'sigma', 'gamma_X', 'sigma_X', where
         'X' is the index of the data set; 'omega' and 'log_e' are used in the
         'mc10' parametrization; 'sqe_cosw' and 'sqe_sinw' are used in the
         'exofast' parametrization. If parameters are missing, the code uses the
-        following default values: log_e=(-3, 3), log_period=(-3, 5),
-        t0=(0, 10000), omega=(0, 360), log_e=(-4, -0.0001), sqe_cosw=(-1, 1),
-        sqe_sinw=(-1, 1), gamma=(-10, 10), sigma=(0.0001, 1.0).
+        following default values: k=(0.001, 1000) km/s, log_period=(1E-3, 1E5)
+        days, t0=(0, 10000) days, omega=(0, 360) deg, ecc=(1E-4, 0.999),
+        sqe_cosw=(-1, 1), sqe_sinw=(-1, 1), gamma=(-10, 10) km/s,
+        sigma=(0.0001, 1.0) km/s.
 
     parametrization: ``str``, optional
         The options are: 'mc10' for the parametrization of Murray & Correia
@@ -100,9 +94,9 @@ class FullOrbit(object):
         self.rv_unc = []
         self.meta = []
         for dsk in self.datasets:
-            self.t.append(dsk.t)
-            self.rv.append(dsk.rv)
-            self.rv_unc.append(dsk.rv_unc)
+            self.t.append(dsk.t.to(u.d))
+            self.rv.append(dsk.rv.to(u.km / u.s))
+            self.rv_unc.append(dsk.rv_unc.to(u.km / u.s))
             self.meta.append(dsk.table.meta)
 
         self.use_add_sigma = use_add_sigma
@@ -114,10 +108,10 @@ class FullOrbit(object):
             self.parametrization = parametrization
 
         # Setting the parameter keywords and the bounds
-        self.keys = ['log_k', 'log_period', 't0']
+        self.keys = ['k', 'period', 't0']
         if self.parametrization == 'mc10':
             self.keys.append('omega')
-            self.keys.append('log_e')
+            self.keys.append('ecc')
         elif self.parametrization == 'exofast':
             self.keys.append('sqe_cosw')
             self.keys.append('sqe_sinw')
@@ -162,7 +156,7 @@ class FullOrbit(object):
 
     # The RV model from Murray & Correia 2010
     @staticmethod
-    def rv_model_mc10(t, log_k, log_period, t0, omega, log_e, gamma):
+    def rv_model_mc10(t, k, period, t0, omega, ecc, gamma):
         """
         The radial velocities model from Murray & Correia 2010.
 
@@ -171,11 +165,11 @@ class FullOrbit(object):
         t : ``astropy.units.Quantity``
             Time.
 
-        log_k : scalar
-            Logarithm (base 10) of the radial velocity semi-amplitude.
+        k : ``astropy.units.Quantity``
+            The radial velocity semi-amplitude (velocity unit).
 
-        log_period : scalar
-            Logarithm (base 10) of the orbital period.
+        period : scalar
+            The orbital period (time unit).
 
         t0 : ``astropy.units.Quantity``
             Time of pariastron passage (time unit).
@@ -183,7 +177,7 @@ class FullOrbit(object):
         omega : ``astropy.units.Quantity``
             Argument of periapse (angle unit).
 
-        log_e : scalar
+        ecc : scalar
             Eccentricity of the orbit.
 
         gamma : ``astropy.units.Quantity``
@@ -194,16 +188,13 @@ class FullOrbit(object):
         rvs : ``astropy.units.Quantity``
             Radial velocity.
         """
-        k = 10 ** log_k
-        period = 10 ** log_period
-        ecc = 10 ** log_e
         system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
         rvs = system.get_rvs(t)
         return rvs
 
     # The RV model from EXOFAST
     @staticmethod
-    def rv_model_exofast(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
+    def rv_model_exofast(t, k, period, t0, sqe_cosw, sqe_sinw, gamma):
         """
         The radial velocities model from EXOFAST (Eastman et al. 2013).
 
@@ -212,11 +203,11 @@ class FullOrbit(object):
         t : ``astropy.units.Quantity``
             Time.
 
-        log_k : scalar
-            Logarithm (base 10) of the radial velocity semi-amplitude.
+        k : ``astropy.units.Quantity``
+            The radial velocity semi-amplitude (velocity unit).
 
-        log_period : scalar
-            Logarithm (base 10) of the orbital period.
+        period : scalar
+            The orbital period (time unit).
 
         t0 : ``astropy.units.Quantity``
             Time of pariastron passage (time unit).
@@ -235,8 +226,6 @@ class FullOrbit(object):
         rvs : ``astropy.units.Quantity``
             Radial velocity.
         """
-        k = 10 ** log_k
-        period = 10 ** log_period
         system = orbit.BinarySystem(k, period, t0, sqe_cosw=sqe_cosw,
                                     sqe_sinw=sqe_sinw, gamma=gamma)
         rvs = system.get_rvs(t)
@@ -276,8 +265,8 @@ class FullOrbit(object):
             elif self.use_add_sigma is True:
                 log_sigma_j = np.log10(theta[self.keys[5 +
                                                        self.n_ds + i]])
-                inv_sigma2 = (1. / (self.rv_unc[i] ** 2 + (10 ** log_sigma_j)
-                                   ** 2)).value
+                inv_sigma2 = (1. / (self.rv_unc[i].value ** 2 +
+                                    (10 ** log_sigma_j) ** 2))
 
             # The log-likelihood
             sum_res += np.sum((self.rv[i] - rvs).value ** 2 * inv_sigma2 +
@@ -297,7 +286,6 @@ class FullOrbit(object):
         result : ``lmfit.MinimizerResult``
 
         """
-
         vary = {}
         for key in self.keys:
             vary[key] = True
@@ -310,19 +298,26 @@ class FullOrbit(object):
                     pass
 
         # The default bounds and guess
-        default_bounds = {'log_k': (-4, 3), 'log_period': (-4, 5),
-                          't0': (0, 10000), 'omega': (0, 360),
-                          'log_e': (-4, -0.0001), 'sqe_cosw': (-1, 1),
-                          'sqe_sinw': (-1, 1), 'gamma': (-10, 10),
-                          'sigma': (1E-4, 5E-1)}
-        default_guess = {'log_k': -1, 'log_period': 3, 't0': 5000, 'omega': 180,
-                         'log_e': -1, 'sqe_cosw': 0,  'sqe_sinw': 0, 'gamma': 0,
-                         'sigma': 0.001}
+        default_bounds = {'k': (1E-3, 1E3) * u.km / u.s,
+                          'period': (1E-3, 1E5) * u.d, 't0': (0, 10000) * u.d,
+                          'omega': (0, 360) * u.deg, 'ecc': (1E-4, 0.999),
+                          'sqe_cosw': (-1, 1), 'sqe_sinw': (-1, 1),
+                          'gamma': (-10, 10) * u.km / u.s,
+                          'sigma': (1E-4, 5E-1) * u.km / u.s}
+        default_guess = {'k': 0.1 * u.km / u.s, 'period': 1000 * u.d,
+                         't0': 5000 * u.d, 'omega': 180 * u.deg, 'ecc': 0.1,
+                         'sqe_cosw': 0, 'sqe_sinw': 0, 'gamma': 0 * u.km / u.s,
+                         'sigma': 0.001 * u.km / u.s}
+        fixed_units = {'k': u.km / u.s, 'period': u.d, 't0': u.d,
+                       'omega': u.deg, 'gamma': u.km / u.s,
+                       'sigma': u.km / u.s}
         for i in range(self.n_ds):
             default_bounds['gamma_{}'.format(i)] = default_bounds['gamma']
             default_bounds['sigma_{}'.format(i)] = default_bounds['sigma']
             default_guess['gamma_{}'.format(i)] = default_guess['gamma']
             default_guess['sigma_{}'.format(i)] = default_guess['sigma']
+            fixed_units['gamma_{}'.format(i)] = u.km / u.s
+            fixed_units['sigma_{}'.format(i)] = u.km / u.s
 
         params = lmfit.Parameters()
 
@@ -332,8 +327,18 @@ class FullOrbit(object):
             if self.guess[key] is None:
                 self.guess[key] = default_guess[key]
 
-            params.add(key, self.guess[key], vary=vary[key],
-                       min=self.bounds[key][0], max=self.bounds[key][1])
+        # Fix units
+        for key in self.keys:
+            try:
+                bounds_uless = ((self.bounds[key][0] / fixed_units[key]).value,
+                                (self.bounds[key][1] / fixed_units[key]).value)
+                guess_uless = (self.guess[key] / fixed_units[key]).value
+            except KeyError:
+                bounds_uless = self.bounds[key]
+                guess_uless = self.guess[key]
+
+            params.add(key, guess_uless, vary=vary[key],
+                       min=bounds_uless[0], max=bounds_uless[1])
 
         # Perform minimization
         self.lmfit_result = lmfit.minimize(self.lnlike, params, method='Nelder')
@@ -390,6 +395,42 @@ class FullOrbit(object):
         else:
             prob = -np.inf
         return prob
+
+
+if __name__ == '__main__':
+
+    harps = dataset.RVDataSet('tests/HIP19911_HARPS.dat', t_offset=-2.45E6,
+                              rv_offset='subtract_mean',
+                              instrument_name='HARPS',
+                              target_name='HIP 19911')
+    hires = dataset.RVDataSet('tests/HIP19911_HIRES.dat', t_offset=-2.45E6,
+                              rv_offset='subtract_mean',
+                              instrument_name='HIRES',
+                              rv_unit=u.m / u.s, target_name='HIP 19911')
+    _datasets = [harps, hires]
+
+    _guess = {'k': 10 ** 0.89093152 * u.km / u.s,
+              'period': 10 ** 3.3165404 * u.d,
+              't0': 4629.04013 * u.d,
+              'omega': 41.2891974 * u.deg,
+              'ecc': 10 ** (-0.08490158),
+              'gamma_0': 0 * u.km / u.s,
+              'gamma_1': -3.86723446 * u.km / u.s,
+              'sigma_0': 0.001 * u.km / u.s,
+              'sigma_1': 0.001 * u.km / u.s}
+
+    _bounds = {'k': (7, 8) * u.km / u.s,
+               'period': (2000, 3000) * u.d,
+               't0': (4000, 5000) * u.d,
+               'omega': (0, 100),
+               'ecc': (0.5, 0.9),
+               'gamma_0': (-1, 1) * u.km / u.s,
+               'gamma_1': (-4, -3) * u.km / u.s,
+               'sigma_0': (0.0001, 0.5) * u.km / u.s,
+               'sigma_1': (0.0001, 0.5) * u.km / u.s}
+
+    estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True)
+    estim.lmfit_orbit()
 '''
     # The probability
     def lnprob(self, theta):
