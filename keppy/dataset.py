@@ -47,9 +47,11 @@ class RVDataSet(object):
         Numerical offset to be summed to the time array. If ``None``, no offset
         is applied. Default is ``None``.
 
-    rv_offset : ``float``, ``astropy.units.Quantity`` or ``None``, optional
+    rv_offset : ``str``, ``float``, ``astropy.units.Quantity`` or ``None``,
+                optional
         Numerical offset to be summed to the radial velocities array. If
-        ``None``, no offset is applied. Default is ``None``.
+        ``None``, no offset is applied. ``str`` options are 'subtract_median'
+        and 'subtract_mean' (self-explanatory). Default is ``None``.
 
     t_unit : ``astropy.units`` or ``None``, optional
         The unit of the time array, in ``astropy.units``. If ``None``, uses
@@ -79,7 +81,15 @@ class RVDataSet(object):
         else:
             self.rv_unit = rv_unit
 
-        # The time offset
+        # Read the data from file
+        self.t = np.loadtxt(file, usecols=(t_col,), skiprows=skiprows,
+                            delimiter=delimiter) * self.t_unit
+        self.rv = np.loadtxt(file, usecols=(rv_col,), skiprows=skiprows,
+                             delimiter=delimiter) * self.rv_unit
+        self.rv_unc = np.loadtxt(file, usecols=(rv_unc_col,), skiprows=skiprows,
+                                 delimiter=delimiter) * self.rv_unit
+
+        # The offsets
         if t_offset is None:
             self.t_offset = 0
         elif isinstance(t_offset, u.Quantity) is True:
@@ -91,19 +101,23 @@ class RVDataSet(object):
             self.rv_offset = 0
         elif isinstance(rv_offset, u.Quantity) is True:
             self.rv_offset = rv_offset
+        elif rv_offset == 'subtract_median':
+            self.rv_offset = -np.median(self.rv)
+        elif rv_offset == 'subtract_mean':
+            self.rv_offset = -np.mean(self.rv)
         else:
             self.rv_offset = rv_offset * self.rv_unit
 
-        # Read the data from file
-        self.t = np.loadtxt(file, usecols=(t_col,), skiprows=skiprows,
-                            delimiter=delimiter) * self.t_unit + self.t_offset
-        self.rv = np.loadtxt(file, usecols=(rv_col,), skiprows=skiprows,
-                             delimiter=delimiter) * self.rv_unit + \
-            self.rv_offset
-        self.rv_unc = np.loadtxt(file, usecols=(rv_unc_col,), skiprows=skiprows,
-                                 delimiter=delimiter) * self.rv_unit
+        self.t += self.t_offset
+        self.rv += self.rv_offset
 
         # Create an astropy table with the data
         self.table = t.Table([self.t, self.rv, self.rv_unc],
                              names=['Time', 'RV', 'RV sigma'],
-                             meta={'Instrument': instrument_name})
+                             meta={'Instrument': instrument_name,
+                                   'Time offset': self.t_offset,
+                                   'RV offset': self.rv_offset})
+
+    # Plot the data
+    def plot(self):
+        pass
