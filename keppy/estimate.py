@@ -2,18 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import scipy.optimize as op
-from keppy import orbit
-import emcee
-import matplotlib
+# import scipy.optimize as op
+from keppy import orbit, dataset
+# import emcee
+# import matplotlib
 import matplotlib.pyplot as plt
-import corner
+# import corner
 import lmfit
 
 # Adjusting some useful matplotlib parameters
-matplotlib.rcParams.update({'font.size': 20})
-matplotlib.rc('xtick', labelsize=13)
-matplotlib.rc('ytick', labelsize=13)
+# matplotlib.rcParams.update({'font.size': 20})
+# matplotlib.rc('xtick', labelsize=13)
+# matplotlib.rc('ytick', labelsize=13)
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -32,68 +32,79 @@ class FullOrbit(object):
     A class that computes the orbital parameters of a binary system given its
     radial velocities (and their uncertainties) in function of time. This class
     is optimized for timeseries that contain at least one full or almost full
-    orbital period.
+    orbital period. IMPORTANT: All logarithms are log10, and not ln.
 
     Parameters
     ----------
-    t : sequence
-        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
-        containing the time [JD - 2.4E6 days]
+    datasets : sequence or ``keppy.dataset.RVDataSet``
+        A list of ``RVDataSet`` objects or one ``RVDataSet`` object that
+        contains the data to be fit. If a sequence is passed, the order that
+        the data sets in the sequence will dictate which instrumental parameter
+        (gamma, sigma) index correspond to each data set.
 
-    rv : sequence
-        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
-        containing the radial velocities [km/s]
+    guess : ``dict`` or sequence
+        First guess of the orbital parameters in the following order. If passed
+        as a sequence, its length must be the same as the number of parameters
+        of the fit: 5 orbital parameters + N, if use_add_sigma is ``False``; or
+        5 orbital parameters + 2 * N, if use_add_sigma is ``True``, where N is
+        the number of data sets. If passed as ``dict``, they keywords must be
+        matched to the names of the parameters to be fit. These names are:
+        'log_k', 'log_period', 't0', 'omega', 'log_e', 'sqe_cosw', 'sqe_sinw',
+        'gamma', 'sigma', 'gamma_X', 'sigma_X', where 'X' is the index of the
+        data set; 'omega' and 'log_e' are used in the 'mc10' parametrization;
+        'sqe_cosw' and 'sqe_sinw' are used in the 'exofast' parametrization. If
+        passed as ``dict`` and parameters are missing, the code uses the
+        following default values: log_k=-1, log_period=3, t0=5000, omega=180,
+        log_e=-1, sqe_cosw=0, sqe_sinw=0, gamma=0, sigma=0.001.
 
-    rv_err : sequence
-        List of ``numpy.ndarray`` or a single ``numpy.ndarray`` object
-        containing the uncertainties of the radial velocities [km/s]
+    bounds : ``dict``, optional
+        Bounds of the parameter search, passed as a ``tuple`` for each
+        parameter. The ``dict`` keywords must match the names of the parameters.
+        These names are: 'log_k', 'log_period', 't0', 'omega', 'log_e',
+        'sqe_cosw', 'sqe_sinw', 'gamma', 'sigma', 'gamma_X', 'sigma_X', where
+        'X' is the index of the data set; 'omega' and 'log_e' are used in the
+        'mc10' parametrization; 'sqe_cosw' and 'sqe_sinw' are used in the
+        'exofast' parametrization. If parameters are missing, the code uses the
+        following default values: log_e=(-3, 3), log_period=(-3, 5),
+        t0=(0, 10000), omega=(0, 360), log_e=(-4, -0.0001), sqe_cosw=(-1, 1),
+        sqe_sinw=(-1, 1), gamma=(-10, 10), sigma=(0.0001, 1.0).
 
-    guess : sequence
-        First guess of the orbital parameters in the following order: log10(K),
-        log10(T), t0, sqrt(e)*cos(w) and sqrt(e)*sin(w).
+    parametrization: ``str``, optional
+        The options are: 'mc10' for the parametrization of Murray & Correia
+        2010, and 'exofast' for the parametrization of Eastman et al. 2013.
+        Default is 'mc10'.
 
-    bounds_vz : sequence or ``tuple``
-        Bounds for the estimation of proper motions of the barycenter (vz) for
-        each dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
-        n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
-        to (2,).
-
-    bounds_sj: ``tuple`` or ``None``, optional
-        Bounds for the estimation of the logarithm of the jitter noise for each
-        dataset. It must have a `numpy.shape` equal to (n_datasets, 2), if
-        n_datasets > 1. If n_datasets == 1, then its `numpy.shape` must be equal
-        to (2,).
-
-    bounds : ``tuple``, optional
-        Bounds for the estimation of the orbital parameters, with the exception
-        of the proper motion of the barycenter (vz). It must have numpy.shape
-        equal to (5, 2). Default is ((-4, 4), (-4, 4), (0, 10000), (0, 360),
-        (-4, -4.3E-5)).
-
-    n_datasets : ``int``, optional
-        Number of datasets to be used for the orbit estimation. Different
-        datasets comprise, e.g., observations from different instruments. This
-        is necessary because different instruments have different offsets in
-        the radial velocities. Default is 1.
-
-    fold: ``bool``, optional
-        If True, the analysis will be performed by phase-folding the radial
-        velocities. If False, analysis is performed on the given time array.
-        Default is False.
+    use_add_sigma : ``bool``, optional
+        If ``True``, the code will use additional parameter to estimate an extra
+        uncertainty term for each RV data set. Default is ``False``.
     """
-    def __init__(self, t, rv, rv_err, guess, bounds=None, n_datasets=1,
-                 parametrization=None, use_add_sigma=False):
+    def __init__(self, datasets, guess, bounds=None, parametrization=None,
+                 use_add_sigma=False):
 
-        if isinstance(n_datasets, int) is False:
-            raise TypeError('n_datasets must be int')
-        elif n_datasets < 0:
-            raise ValueError('n_datasets must be greater than zero')
+        self.datasets = datasets
+
+        if isinstance(datasets, dataset.RVDataSet):
+            self.n_ds = 1
         else:
-            self.n_datasets = n_datasets
+            self.n_ds = len(datasets)
+            # Check if the datasets are passed as RVDataSet objects
+            for dsk in self.datasets:
+                assert isinstance(dsk,
+                                  dataset.RVDataSet), 'The datasets must be ' \
+                                                      'passed as RVDataSet ' \
+                                                      'objects.'
 
-        self.t = t
-        self.rv = rv
-        self.rv_err = rv_err
+        # Read the data
+        self.t = []
+        self.rv = []
+        self.rv_unc = []
+        self.meta = []
+        for dsk in self.datasets:
+            self.t.append(dsk.t)
+            self.rv.append(dsk.rv)
+            self.rv_unc.append(dsk.rv_unc)
+            self.meta.append(dsk.table.meta)
+
         self.use_add_sigma = use_add_sigma
 
         # Setting the parametrization option
@@ -110,21 +121,28 @@ class FullOrbit(object):
         elif self.parametrization == 'exofast':
             self.keys.append('sqe_cosw')
             self.keys.append('sqe_sinw')
-        if self.n_datasets == 1:
+        if self.n_ds == 1:
             self.keys.append('gamma')
             if self.use_add_sigma is True:
                 self.keys.append('sigma')
         else:
-            for i in range(self.n_datasets):
+            for i in range(self.n_ds):
                 self.keys.append('gamma_{}'.format(i))
             if self.use_add_sigma is True:
-                for i in range(self.n_datasets):
+                for i in range(self.n_ds):
                     self.keys.append('sigma_{}'.format(i))
 
         # The guess dict
         self.guess = {}
-        for i in range(len(self.keys)):
-            self.guess[self.keys[i]] = guess[i]
+        if isinstance(guess, dict) is False:
+            for i in range(len(self.keys)):
+                self.guess[self.keys[i]] = guess[i]
+        elif isinstance(guess, dict) is True:
+            for key in self.keys:
+                try:
+                    self.guess[key] = guess[key]
+                except KeyError:
+                    self.guess[key] = None
 
         # Setting the orbital parameter bounds
         self.bounds = {}
@@ -139,27 +157,47 @@ class FullOrbit(object):
         else:
             pass
 
+        # Initializing useful global variables
+        self.lmfit_result = None
+
     # The RV model from Murray & Correia 2010
     @staticmethod
     def rv_model_mc10(t, log_k, log_period, t0, omega, log_e, gamma):
         """
+        The radial velocities model from Murray & Correia 2010.
 
         Parameters
         ----------
-        t
-        log_k
-        log_period
-        t0
-        omega
-        log_e
-        gamma
+        t : ``astropy.units.Quantity``
+            Time.
+
+        log_k : scalar
+            Logarithm (base 10) of the radial velocity semi-amplitude.
+
+        log_period : scalar
+            Logarithm (base 10) of the orbital period.
+
+        t0 : ``astropy.units.Quantity``
+            Time of pariastron passage (time unit).
+
+        omega : ``astropy.units.Quantity``
+            Argument of periapse (angle unit).
+
+        log_e : scalar
+            Eccentricity of the orbit.
+
+        gamma : ``astropy.units.Quantity``
+            Proper motion of the barycenter (velocity unit).
 
         Returns
         -------
-
+        rvs : ``astropy.units.Quantity``
+            Radial velocity.
         """
-        system = orbit.BinarySystem(log_k, log_period, t0, omega, log_e,
-                                    vz=gamma)
+        k = 10 ** log_k
+        period = 10 ** log_period
+        ecc = 10 ** log_e
+        system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
         rvs = system.get_rvs(t)
         return rvs
 
@@ -167,23 +205,40 @@ class FullOrbit(object):
     @staticmethod
     def rv_model_exofast(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
         """
+        The radial velocities model from EXOFAST (Eastman et al. 2013).
 
         Parameters
         ----------
-        t
-        log_k
-        log_period
-        t0
-        sqe_cosw
-        sqe_sinw
-        gamma
+        t : ``astropy.units.Quantity``
+            Time.
+
+        log_k : scalar
+            Logarithm (base 10) of the radial velocity semi-amplitude.
+
+        log_period : scalar
+            Logarithm (base 10) of the orbital period.
+
+        t0 : ``astropy.units.Quantity``
+            Time of pariastron passage (time unit).
+
+        sqe_cosw : scalar
+            sqrt(ecc) * cos(omega).
+
+        sqe_sinw : scalar
+            sqrt(ecc) * sin(omega).
+
+        gamma : ``astropy.units.Quantity``
+            Proper motion of the barycenter (velocity unit).
 
         Returns
         -------
-
+        rvs : ``astropy.units.Quantity``
+            Radial velocity.
         """
-        system = orbit.BinarySystem(log_k, log_period, t0, sqe_cosw, sqe_sinw,
-                                    vz=gamma)
+        k = 10 ** log_k
+        period = 10 ** log_period
+        system = orbit.BinarySystem(k, period, t0, sqe_cosw=sqe_cosw,
+                                    sqe_sinw=sqe_sinw, gamma=gamma)
         rvs = system.get_rvs(t)
         return rvs
 
@@ -194,7 +249,6 @@ class FullOrbit(object):
         Parameters
         ----------
         theta
-        keys
 
         Returns
         -------
@@ -202,7 +256,7 @@ class FullOrbit(object):
         """
         v = theta.valuesdict()
         sum_res = 0
-        for i in range(self.n_datasets):
+        for i in range(self.n_ds):
 
             # Compute the RVs using the appropriate model
             if self.parametrization == 'mc10':
@@ -218,16 +272,16 @@ class FullOrbit(object):
 
             # If user wants to estimate additional sigma
             if self.use_add_sigma is False:
-                inv_sigma2 = 1. / (self.rv_err[i] ** 2)
+                inv_sigma2 = (1. / (self.rv_unc[i] ** 2)).value
             elif self.use_add_sigma is True:
                 log_sigma_j = np.log10(theta[self.keys[5 +
-                                                       self.n_datasets + i]])
-                inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j)
-                                   ** 2)
+                                                       self.n_ds + i]])
+                inv_sigma2 = (1. / (self.rv_unc[i] ** 2 + (10 ** log_sigma_j)
+                                   ** 2)).value
 
             # The log-likelihood
-            sum_res += np.sum((self.rv[i] - rvs) ** 2 * inv_sigma2 +
-                               np.log(2. * np.pi / inv_sigma2))
+            sum_res += np.sum((self.rv[i] - rvs).value ** 2 * inv_sigma2 +
+                              np.log(2. * np.pi / inv_sigma2))
         return sum_res
 
     # Estimation using lmfit
@@ -236,10 +290,11 @@ class FullOrbit(object):
 
         Parameters
         ----------
-        fix_param : dict
+        fix_param : ``dict``
 
         Returns
         -------
+        result : ``lmfit.MinimizerResult``
 
         """
 
@@ -254,112 +309,53 @@ class FullOrbit(object):
                 except KeyError:
                     pass
 
-        # The default bounds
+        # The default bounds and guess
         default_bounds = {'log_k': (-4, 3), 'log_period': (-4, 5),
                           't0': (0, 10000), 'omega': (0, 360),
                           'log_e': (-4, -0.0001), 'sqe_cosw': (-1, 1),
                           'sqe_sinw': (-1, 1), 'gamma': (-10, 10),
                           'sigma': (1E-4, 5E-1)}
-        for i in range(self.n_datasets):
+        default_guess = {'log_k': -1, 'log_period': 3, 't0': 5000, 'omega': 180,
+                         'log_e': -1, 'sqe_cosw': 0,  'sqe_sinw': 0, 'gamma': 0,
+                         'sigma': 0.001}
+        for i in range(self.n_ds):
             default_bounds['gamma_{}'.format(i)] = default_bounds['gamma']
             default_bounds['sigma_{}'.format(i)] = default_bounds['sigma']
+            default_guess['gamma_{}'.format(i)] = default_guess['gamma']
+            default_guess['sigma_{}'.format(i)] = default_guess['sigma']
 
         params = lmfit.Parameters()
 
         for key in self.keys:
             if self.bounds[key] is None:
-                params.add(key, self.guess[key], vary=vary[key],
-                           min=default_bounds[key][0],
-                           max=default_bounds[key][1])
-            else:
-                params.add(key, self.guess[key], vary=vary[key],
-                           min=self.bounds[key][0],
-                           max=self.bounds[key][1])
+                self.bounds[key] = default_bounds[key]
+            if self.guess[key] is None:
+                self.guess[key] = default_guess[key]
+
+            params.add(key, self.guess[key], vary=vary[key],
+                       min=self.bounds[key][0], max=self.bounds[key][1])
 
         # Perform minimization
-        mi = lmfit.minimize(self.lnlike, params, method='Nelder')
-        lmfit.printfuncs.report_fit(mi.params, min_correl=0.5)
+        self.lmfit_result = lmfit.minimize(self.lnlike, params, method='Nelder')
+        lmfit.printfuncs.report_fit(self.lmfit_result.params, min_correl=0.5)
 
-'''
-    # The likelihood function
-    # noinspection PyTypeChecker
-    def lnlike(self, theta):
-        """
-        This method produces the ln of the Gaussian likelihood function of a
-        given set of parameters producing the observed data (t, rv +/- rv_err).
+    # Plot lmfit_orbit result and residuals
+    def plot_lmfit_result(self, fold=False):
 
-        Parameters
-        ----------
-        theta : ``numpy.ndarray``
-            Array containing the 5+n_datasets parameters log_k, log_period, t0,
-            w, log_e and the velocity offsets for each dataset
+        p = self.lmfit_result.params.valuesdict()
+        if self.n_datasets == 1:
+            t = np.linspace(min(self.t) - 100, max(self.t) + 100, 1000)
+            rvs = self.rv_model_mc10(self.t, p['log_k'], p['log_period'],
+                                     p['t0'], p['omega'], p['log_e'], 0)
+            rv_curve = self.rv_model_mc10(t, p['log_k'], p['log_period'],
+                                     p['t0'], p['omega'], p['log_e'], 0)
+            resi = self.rv - rvs
+            gamma = p['gamma']
+            plt.errorbar(self.t, np.array(self.rv) - gamma, self.rv_err, fmt='o',
+                         label='Data')
+            plt.plot(t, rv_curve, label='Fit')
+            plt.show()
 
-        Returns
-        -------
-        sum_like : ``float``
-            The ln of the likelihood of the signal rv being the result of a
-            model with parameters theta
-        """
-        sum_like = 0
-        if self.fold is True:
-            time_array = self.t / (10 ** theta[1]) % 1
-        else:
-            time_array = self.t
-        # Measuring the log-likelihood for each dataset separately
-        for i in range(self.n_datasets):
-            if self.n_datasets > 1:
-                n = len(time_array[i])
-            else:
-                n = len(time_array[0])
-            system = orbit.BinarySystem(log_k=theta[0], log_period=theta[1],
-                                        t0=theta[2], sqe_cosw=theta[3],
-                                        sqe_sinw=theta[4], vz=theta[5 + i])
-            model = system.get_rvs(ts=time_array[i], nt=n)
-            if self.bounds_sj is None:
-                inv_sigma2 = 1. / (self.rv_err[i] ** 2)
-            else:
-                log_sigma_j = theta[5 + self.n_datasets + i]
-                inv_sigma2 = 1. / (self.rv_err[i] ** 2 + (10 ** log_sigma_j)
-                                   ** 2)
-            sum_like += np.sum((self.rv[i] - model) ** 2 * inv_sigma2 +
-                               np.log(2. * np.pi / inv_sigma2))
-        sum_like *= -0.5
-        return sum_like
-
-    # Maximum likelihood estimation of orbital parameters
-    def ml_orbit(self, maxiter=200, disp=False):
-        """
-        This method produces the maximum likelihood estimation of the orbital
-        parameters.
-
-        Parameters
-        ----------
-        maxiter : ``int``, optional
-            Maximum number of iterations on scipy.minimize. Default=200
-
-        disp : ``bool``, optional
-            Display information about the minimization.
-
-        Returns
-        -------
-        params : list
-            An array with the estimated values of the parameters that best model
-            the signal rv
-        """
-        nll = lambda *args: -self.lnlike(*args)
-        result = op.minimize(fun=nll,
-                             x0=self.guess,
-                             method='TNC',
-                             bounds=self.bounds,
-                             options={'maxiter': maxiter, "disp": disp})
-
-        if disp is True:
-            print('Number of iterations performed = %i' % result['nit'])
-            print('Minimization successful = %s' % repr(result['success']))
-            print('Cause of termination = %s' % result['message'])
-
-        params = result["x"]
-        return params
 
     # Flat priors
     def flat(self, theta):
@@ -368,7 +364,7 @@ class FullOrbit(object):
 
         Parameters
         ----------
-        theta : sequence
+        theta : ``dict``
             The orbital and instrumental parameters.
 
         Returns
@@ -377,16 +373,24 @@ class FullOrbit(object):
             The prior probability for a given set of orbital and instrumental
             parameters.
         """
+        # TODO: Implement usage of MinimizerResult as an alternative
+        assert isinstance(theta, lmfit.minimizer.MinimizerResult) is False, \
+            'The use of MinimizerResult class is not implemented yet.'
+
         # Compute the eccentricity beforehand to impose a prior of e < 1 on it
-        ecc = theta[3] ** 2 + theta[4] ** 2
-        params = [self.bounds[i][0] < theta[i] < self.bounds[i][1]
-                  for i in range(len(theta))]
-        if all(params) is True and ecc < 1:
+        try:
+            ecc = 10 ** theta['log_e']
+        except KeyError:
+            ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
+
+        check = [self.bounds[key][0] < theta[key] < self.bounds[key][1]
+                 for key in self.keys]
+        if all(check) is True and ecc < 1:
             prob = 0.0
         else:
             prob = -np.inf
         return prob
-
+'''
     # The probability
     def lnprob(self, theta):
         """
@@ -395,7 +399,7 @@ class FullOrbit(object):
 
         Parameters
         ----------
-        theta: sequence
+        theta: ``dict``
             The values of the orbital parameters log_k, log_period, t0, w, log_e
 
         Returns
