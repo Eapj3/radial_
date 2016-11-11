@@ -4,7 +4,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import numpy as np
-import astropy.table as t
+import astropy.table as tb
 import astropy.units as u
 import matplotlib.pyplot as plt
 
@@ -79,6 +79,8 @@ class RVDataSet(object):
                  rv_unit=None, instrument_name=None, target_name=None,
                  other_meta=None):
 
+        # TODO: Add option to set the plotting parameters (symbol, color etc.)
+
         # Setting up the default values
         # The time unit
         if t_unit is None:
@@ -131,12 +133,12 @@ class RVDataSet(object):
         self.rv += self.rv_offset
 
         # Create an astropy table with the data
-        self.table = t.Table([self.t, self.rv, self.rv_unc],
-                             names=['Time', 'RV', 'RV sigma'],
-                             meta={'Instrument': self.instr_name,
-                                   'Time offset': self.t_offset,
-                                   'RV offset': self.rv_offset,
-                                   'Target': self.target_name})
+        self.table = tb.Table([self.t, self.rv, self.rv_unc],
+                              names=['Time', 'RV', 'RV sigma'],
+                              meta={'Instrument': self.instr_name,
+                                    'Time offset': self.t_offset,
+                                    'RV offset': self.rv_offset,
+                                    'Target': self.target_name})
 
         # Add the optional extra metadata
         if isinstance(other_meta, dict):
@@ -144,6 +146,9 @@ class RVDataSet(object):
 
     # Plot the data
     def plot(self):
+        """
+        Plot the data set.
+        """
         plt.errorbar(self.t.value, self.rv.value, yerr=self.rv_unc.value,
                      fmt='ko')
         plt.title("{} observed on {}".format(self.table.meta['Target'],
@@ -151,4 +156,3 @@ class RVDataSet(object):
         plt.xlabel('Time ({})'.format(self.t.unit))
         plt.ylabel('Radial velocities ({})'.format(self.rv.unit))
         plt.show()
-
