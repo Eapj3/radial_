@@ -15,22 +15,55 @@ This module is used to manage radial velocities datasets.
 # The RV dataset class
 class RVDataSet(object):
     """
+    Read and store the data and information of the radial velocities dataset in
+    an intelligible manner. This class utilizes the power and convenience of
+    ``astropy`` units and tables.
 
     Parameters
     ----------
-    file
-    t_col
-    rv_col
-    rv_unc_col
-    skiprows
-    delimiter
-    t_offset
-    rv_offset
-    t_unit
-    rv_unit
-    instrument_name
+    file : ``str``
+        Name of the file that contains the radial velocities data.
+
+    t_col : ``int``, optional
+        Column number of the data file that corresponds to time. Default is 0.
+
+    rv_col : ``int``, optional
+        Column number of the data file that corresponds to radial velocities.
+        Default is 1.
+
+    rv_unc_col : ``int``, optional
+        Column number of the data file that corresponds to radial velocity
+        uncertainties. Default is 2.
+
+    skiprows : ``int``, optional
+        Number of rows to skip from the data file. Default is 0.
+
+    delimiter : ``str`` or ``None``, optional
+        String that is used to separate the columns in the data file. If
+        ``None``, uses the default value from ``numpy.loadtxt``. Default is
+        ``None``.
+
+    t_offset : ``float``, ``astropy.units.Quantity`` or ``None``, optional
+        Numerical offset to be summed to the time array. If ``None``, no offset
+        is applied. Default is ``None``.
+
+    rv_offset : ``float``, ``astropy.units.Quantity`` or ``None``, optional
+        Numerical offset to be summed to the radial velocities array. If
+        ``None``, no offset is applied. Default is ``None``.
+
+    t_unit : ``astropy.units`` or ``None``, optional
+        The unit of the time array, in ``astropy.units``. If ``None``, uses
+        days. Default is ``None``.
+
+    rv_unit : ``astropy.units`` or ``None``, optional
+        The unit of the radial velocities and uncertainties arrays, in
+        ``astropy.units``. If ``None``, uses km/s. Default is ``None``.
+
+    instrument_name : ``str`` or ``None``, optional
+        Name of the instrument, which will be save in the metadata. Default is
+        ``None``.
     """
-    def __init__(self, file, t_col=0, rv_col=1, rv_unc_col=None, skiprows=0,
+    def __init__(self, file, t_col=0, rv_col=1, rv_unc_col=2, skiprows=0,
                  delimiter=None, t_offset=None, rv_offset=None, t_unit=None,
                  rv_unit=None, instrument_name=None):
 
@@ -67,12 +100,8 @@ class RVDataSet(object):
         self.rv = np.loadtxt(file, usecols=(rv_col,), skiprows=skiprows,
                              delimiter=delimiter) * self.rv_unit + \
             self.rv_offset
-        if rv_unc_col is None:
-            self.rv_unc = None
-        else:
-            self.rv_unc = np.loadtxt(file, usecols=(rv_unc_col,),
-                                     skiprows=skiprows, delimiter=delimiter) \
-                * self.rv_unit
+        self.rv_unc = np.loadtxt(file, usecols=(rv_unc_col,), skiprows=skiprows,
+                                 delimiter=delimiter) * self.rv_unit
 
         # Create an astropy table with the data
         self.table = t.Table([self.t, self.rv, self.rv_unc],
