@@ -35,7 +35,7 @@ class BinarySystem(object):
         unit of days.
 
     omega : scalar, ``astropy.units.Quantity`` or ``None``, optional
-        Argument of periapse [degrees]. If ``None``, both ``sqe_cosw`` and
+        Argument of periapse (angle unit). If ``None``, both ``sqe_cosw`` and
         ``sqe_sinw`` will be required. If passed as scalar, assumes unit of
         degrees. Default is ``None``.
 
