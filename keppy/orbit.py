@@ -24,20 +24,20 @@ class BinarySystem(object):
     ----------
     k : scalar or ``astropy.units.Quantity``
         The radial velocity semi-amplitude K (velocity unit). If passed as
-        scalar, assumes unit of km / s.
+        scalar, assumes unit on ``work_units``.
 
     period : scalar or ``astropy.units.Quantity``
-        The orbital period (time unit). If passed as scalar, assumes unit of
-        days.
+        The orbital period (time unit). If passed as scalar, assumes unit on
+        ``work_units``.
 
     t0 : scalar or ``astropy.units.Quantity``
         Time of pariastron passage (time unit). If passed as scalar, assumes
-        unit of days.
+        unit on ``work_units``.
 
     omega : scalar, ``astropy.units.Quantity`` or ``None``, optional
         Argument of periapse (angle unit). If ``None``, both ``sqe_cosw`` and
-        ``sqe_sinw`` will be required. If passed as scalar, assumes unit of
-        degrees. Default is ``None``.
+        ``sqe_sinw`` will be required. If passed as scalar, assumes unit on
+        ``work_units``. Default is ``None``.
 
     ecc : scalar or ``None``, optional
         Eccentricity of the orbit. If ``None``, both ``sqe_cosw`` and
@@ -55,10 +55,18 @@ class BinarySystem(object):
 
     gamma : scalar or ``astropy.units.Quantity``, optional
         Proper motion of the barycenter (velocity unit). If passed as scalar,
-        assumes unit km / s. Default is 0.
+        assumes unit on ``work_units``. Default is 0.
+
+    work_units : ``dict`` or ``None``, optional
+        Dictionary containing the ``astropy.units`` for the entries 'velocity',
+        'time' and 'angle'. If ``None``, assume units km / s, days and degrees,
+        respectively.
     """
     def __init__(self, k, period, t0, omega=None, ecc=None, sqe_cosw=None,
-                 sqe_sinw=None, gamma=0):
+                 sqe_sinw=None, gamma=0, work_units=None):
+
+        if work_units is None:
+            self.work_units = {'velocity': u.km / u.s, 'time': u.d, 'angle': u.deg}
 
         if omega is None or ecc is None:
             if sqe_cosw is None or sqe_sinw is None:
@@ -72,24 +80,24 @@ class BinarySystem(object):
             if isinstance(omega, u.Quantity):
                 self.omega = omega
             else:
-                self.omega = omega * u.deg
+                self.omega = omega * self.work_units['angle']
 
         if isinstance(k, u.Quantity):
             self.k = k
         else:
-            self.k = k * u.km / u.s
+            self.k = k * self.work_units['velocity']
         if isinstance(period, u.Quantity):
             self.period = period
         else:
-            self.period = period * u.d
+            self.period = period * self.work_units['time']
         if isinstance(t0, u.Quantity):
             self.t0 = t0
         else:
-            self.t0 = t0 * u.d
+            self.t0 = t0 * self.work_units['time']
         if isinstance(gamma, u.Quantity):
             self.gamma = gamma
         else:
-            self.gamma = gamma * u.km / u.s
+            self.gamma = gamma * self.work_units['velocity']
 
         if self.ecc > 1:
             raise ValueError('Keplerian orbits are ellipses, therefore ecc <= '
@@ -175,7 +183,7 @@ if __name__ == '__main__':
     start_time = time.time()  # We use this to measure the computation time
 
     # First, we create an instance of the system HIP156846
-    HIP156846 = BinarySystem(k=0.464 * u.m / u.s,
+    HIP156846 = BinarySystem(k=0.464 * u.km / u.s,
                              period=359.51 * u.d,
                              t0=3998.1 * u.d,
                              #omega=52.2 * u.deg,
