@@ -383,7 +383,7 @@ class FullOrbit(object):
         return sum_res
 
     # Estimation using lmfit
-    def lmfit_orbit(self, fix_param=None):
+    def lmfit_orbit(self, fix_param=None, verbose=True, update_guess=False):
         """
 
         Parameters
@@ -451,7 +451,6 @@ class FullOrbit(object):
 
         # Perform minimization
         self.lmfit_result = lmfit.minimize(self.lnlike, params, method='Nelder')
-        lmfit.printfuncs.report_fit(self.lmfit_result.params, min_correl=0.5)
 
         # Compute the missing parameters that depend on the parametrization
         if self.parametrization == 'mc10':
@@ -470,24 +469,22 @@ class FullOrbit(object):
             self.lmfit_result.params.add('omega', value=omega)
             self.lmfit_result.params.add('ecc', value=ecc)
 
-        """
-        # Attaching units to the fit parameters
-        self.lmfit_result.params['k'].value *= fixed_units['k']
-        self.lmfit_result.params['period'].value *= fixed_units['period']
-        self.lmfit_result.params['t0'].value *= fixed_units['t0']
-        self.lmfit_result.params['omega'].value *= fixed_units['omega']
-        try:
-            self.lmfit_result.params['gamma'].value *= fixed_units['gamma']
-            self.lmfit_result.params['sigma'].value *= fixed_units['sigma']
-        except KeyError:
-            for i in range(self.n_ds):
-                self.lmfit_result.params['gamma_{}'.format(i)].value *= \
-                    fixed_units['gamma']
-                self.lmfit_result.params['sigma_{}'.format(i)].value *= \
-                    fixed_units['sigma']
-        """
+        # Updating global variable best_params
+        for key in self.keys:
+            self.best_params[key] = self.lmfit_result.params[key].value
+            try:
+                self.best_params[key] *= fixed_units[key]
+            except KeyError:
+                pass
 
-        return self.lmfit_result
+        if update_guess is True:
+            self.guess = self.best_params
+
+        if verbose is True:
+            for key in self.keys:
+                print('{} = {}'.format(key, self.best_params[key]))
+
+        return self.best_params
 
     # Plot lmfit_orbit result and residuals
     def plot_lmfit_result(self, fold=False):
