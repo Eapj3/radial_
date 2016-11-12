@@ -154,10 +154,13 @@ class FullOrbit(object):
 
         # Initializing useful global variables
         self.lmfit_result = None
+        self.best_params = {}
+        for key in self.keys:
+            self.best_params[key] = None
 
     # Plot the data sets
     def plot_ds(self, rv_unit=u.km / u.s, t_unit=u.d, legend_loc=None,
-                symbols=None, plot_guess=False, plot_res=False):
+                symbols=None, plot_guess=False):
         """
         Plot the data sets.
 
@@ -180,18 +183,20 @@ class FullOrbit(object):
         plot_guess : ``bool``, optional
             If ``True``, also plots the guess as a black curve, and the RVs of
             each data set is shifted by its respective gamma value.
-
-        plot_res : ``bool``, optional
-            If ``True``, also plot the residuals of guess fit. Can only be used
-            if ``plot_guess`` is ``True``. Default is ``False``.
         """
         # Use matplotlib's default symbols if ``None`` is passed.
         if symbols is None:
             markers = mrk.MarkerStyle()
             symbols = markers.filled_markers
 
+        fig = plt.figure(figsize=(6, 5))
+        gs = plt.GridSpec(2, 1, height_ratios=(4, 1))
+        ax_fit = fig.add_subplot(gs[0])
+
         for i in range(self.n_ds):
             if plot_guess is True:
+                ax_res = fig.add_subplot(gs[1], sharex=ax_fit)
+
                 # First we figure out the bounds of the plot
                 t_min = min([min(tk.to(t_unit)) for tk in self.t]).value
                 t_max = max([max(tk.to(t_unit)) for tk in self.t]).value
@@ -213,6 +218,7 @@ class FullOrbit(object):
                                                 sqe_sinw=self.guess['sqe_sinw'],
                                                 gamma=0)
                 rv_guess = system.get_rvs(ts=t_guess)
+                rv_guess_samepoints = system.get_rvs(ts=self.t[i])
 
                 # Shift the radial velocities with the provided gamma
                 if self.n_ds > 1:
@@ -221,23 +227,41 @@ class FullOrbit(object):
                     rvs = self.rv[i] - self.guess['gamma']
 
                 # And finally plot the data and the curve
-                plt.errorbar(self.t[i].to(t_unit).value, rvs.to(rv_unit).value,
-                             yerr=self.rv_unc[i].to(rv_unit).value,
-                             fmt=symbols[i], label=self.meta[i]['Instrument'])
-                plt.plot(t_guess.to(t_unit).value, rv_guess.to(rv_unit).value,
-                         color='k')
+                ax_fit.errorbar(self.t[i].to(t_unit).value,
+                                rvs.to(rv_unit).value,
+                                yerr=self.rv_unc[i].to(rv_unit).value,
+                                fmt=symbols[i],
+                                label=self.meta[i]['Instrument'])
+                ax_fit.plot(t_guess.to(t_unit).value,
+                            rv_guess.to(rv_unit).value,
+                            color='k')
+
+                # Plot the residuals
+                res = rv_guess_samepoints - rvs
+                ax_res.errorbar(self.t[i].to(t_unit).value,
+                                res.to(rv_unit).value,
+                                yerr=self.rv_unc[i].to(rv_unit).value,
+                                fmt=symbols[i])
+                ax_res.set_ylabel('Residuals\n({})'.format(rv_unit))
+                plt.setp(ax_res.get_xticklabels(), visible=False)
             else:
-                plt.errorbar(self.t[i].to(t_unit).value,
-                             self.rv[i].to(rv_unit).value,
-                             yerr=self.rv_unc[i].to(rv_unit).value,
-                             fmt=symbols[i], label=self.meta[i]['Instrument'])
+                ax_fit.errorbar(self.t[i].to(t_unit).value,
+                                self.rv[i].to(rv_unit).value,
+                                yerr=self.rv_unc[i].to(rv_unit).value,
+                                fmt=symbols[i],
+                                label=self.meta[i]['Instrument'])
 
         # Show the plot
-        plt.xlabel('Time ({})'.format(t_unit))
-        plt.ylabel('Radial velocities ({})'.format(rv_unit))
-        plt.title('{}'.format(self.meta[0]['Target']))
-        plt.legend(loc=legend_loc, numpoints=1)
-        plt.show()
+        ax_fit.set_xlabel('Time ({})'.format(t_unit))
+        ax_fit.set_ylabel('Radial velocities ({})'.format(rv_unit))
+        ax_fit.set_title('{}'.format(self.meta[0]['Target']))
+        ax_fit.legend(loc=legend_loc, numpoints=1)
+        plt.tight_layout()
+
+        if plot_guess is False:
+            return ax_fit
+        else:
+            return fig, gs
 
     # The RV model from Murray & Correia 2010
     @staticmethod
@@ -428,6 +452,42 @@ class FullOrbit(object):
         # Perform minimization
         self.lmfit_result = lmfit.minimize(self.lnlike, params, method='Nelder')
         lmfit.printfuncs.report_fit(self.lmfit_result.params, min_correl=0.5)
+
+        # Compute the missing parameters that depend on the parametrization
+        if self.parametrization == 'mc10':
+            ecc = self.lmfit_result.params['ecc']
+            omega = self.lmfit_result.params['omega']
+            self.lmfit_result.params.add('sqe_cosw',
+                                         value=np.sqrt(ecc) * np.cos(omega))
+            self.lmfit_result.params.add('sqe_sinw',
+                                         value=np.sqrt(ecc) * np.sin(omega))
+        elif self.parametrization == 'exofast':
+            ecc = self.lmfit_result.params['sqe_cosw'].value ** 2 + \
+                  self.lmfit_result.params['sqe_sinw'].value ** 2
+            omega = np.degrees(np.arctan2(
+                self.lmfit_result.params['sqe_sinw'].value,
+                self.lmfit_result.params['sqe_cosw'].value))
+            self.lmfit_result.params.add('omega', value=omega)
+            self.lmfit_result.params.add('ecc', value=ecc)
+
+        """
+        # Attaching units to the fit parameters
+        self.lmfit_result.params['k'].value *= fixed_units['k']
+        self.lmfit_result.params['period'].value *= fixed_units['period']
+        self.lmfit_result.params['t0'].value *= fixed_units['t0']
+        self.lmfit_result.params['omega'].value *= fixed_units['omega']
+        try:
+            self.lmfit_result.params['gamma'].value *= fixed_units['gamma']
+            self.lmfit_result.params['sigma'].value *= fixed_units['sigma']
+        except KeyError:
+            for i in range(self.n_ds):
+                self.lmfit_result.params['gamma_{}'.format(i)].value *= \
+                    fixed_units['gamma']
+                self.lmfit_result.params['sigma_{}'.format(i)].value *= \
+                    fixed_units['sigma']
+        """
+
+        return self.lmfit_result
 
     # Plot lmfit_orbit result and residuals
     def plot_lmfit_result(self, fold=False):
