@@ -109,10 +109,10 @@ class FullOrbit(object):
             self.parametrization = parametrization
 
         # Setting the parameter keywords and the bounds
-        self.keys = ['k', 'period', 't0']
+        self.keys = ['log_k', 'log_period', 't0']
         if self.parametrization == 'mc10':
             self.keys.append('omega')
-            self.keys.append('ecc')
+            self.keys.append('log_ecc')
         elif self.parametrization == 'exofast':
             self.keys.append('sqe_cosw')
             self.keys.append('sqe_sinw')
@@ -204,15 +204,17 @@ class FullOrbit(object):
 
                 # Compute the radial velocities for the guess
                 try:
-                    system = orbit.BinarySystem(k=self.guess['k'],
-                                                period=self.guess['period'],
+                    system = orbit.BinarySystem(k=self.guess['log_k'].physical,
+                                                period=self.guess[
+                                                    'log_period'].physical,
                                                 t0=self.guess['t0'],
                                                 omega=self.guess['omega'],
-                                                ecc=self.guess['ecc'],
+                                                ecc=10 ** self.guess['log_ecc'],
                                                 gamma=0)
                 except KeyError:
-                    system = orbit.BinarySystem(k=self.guess['k'],
-                                                period=self.guess['period'],
+                    system = orbit.BinarySystem(k=self.guess['log_k'].physical,
+                                                period=self.guess[
+                                                    'log_period'].physical,
                                                 t0=self.guess['t0'],
                                                 sqe_cosw=self.guess['sqe_cosw'],
                                                 sqe_sinw=self.guess['sqe_sinw'],
@@ -265,7 +267,7 @@ class FullOrbit(object):
 
     # The RV model from Murray & Correia 2010
     @staticmethod
-    def rv_model_mc10(t, k, period, t0, omega, ecc, gamma):
+    def rv_model_mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
         """
         The radial velocities model from Murray & Correia 2010.
 
@@ -297,6 +299,9 @@ class FullOrbit(object):
         rvs : ``astropy.units.Quantity``
             Radial velocity.
         """
+        k = 10 ** log_k
+        period = 10 ** log_period
+        ecc = 10 ** log_ecc
         system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
         rvs = system.get_rvs(t)
         return rvs
@@ -407,18 +412,20 @@ class FullOrbit(object):
                     pass
 
         # The default bounds and guess
-        default_bounds = {'k': (1E-3, 1E3) * u.km / u.s,
-                          'period': (1E-3, 1E5) * u.d, 't0': (0, 10000) * u.d,
-                          'omega': (0, 360) * u.deg, 'ecc': (1E-4, 0.999),
+        default_bounds = {'log_k': (-3, 3) * u.dex(u.km / u.s),
+                          'log_period': (-3, 5) * u.dex(u.d),
+                          't0': (0, 10000) * u.d,
+                          'omega': (0, 360) * u.deg, 'log_ecc': (-4, -0.0001),
                           'sqe_cosw': (-1, 1), 'sqe_sinw': (-1, 1),
                           'gamma': (-10, 10) * u.km / u.s,
                           'sigma': (1E-4, 5E-1) * u.km / u.s}
-        default_guess = {'k': 0.1 * u.km / u.s, 'period': 1000 * u.d,
-                         't0': 5000 * u.d, 'omega': 180 * u.deg, 'ecc': 0.1,
+        default_guess = {'log_k': -1 * u.dex(u.km / u.s),
+                         'log_period': 3 * u.dex(u.d),
+                         't0': 5000 * u.d, 'omega': 180 * u.deg, 'log_ecc': -1,
                          'sqe_cosw': 0, 'sqe_sinw': 0, 'gamma': 0 * u.km / u.s,
                          'sigma': 0.001 * u.km / u.s}
-        fixed_units = {'k': u.km / u.s, 'period': u.d, 't0': u.d,
-                       'omega': u.deg, 'gamma': u.km / u.s,
+        fixed_units = {'log_k': u.dex(u.km / u.s), 'log_period': u.dex(u.d),
+                       't0': u.d, 'omega': u.deg, 'gamma': u.km / u.s,
                        'sigma': u.km / u.s}
         for i in range(self.n_ds):
             default_bounds['gamma_{}'.format(i)] = default_bounds['gamma']
@@ -440,13 +447,13 @@ class FullOrbit(object):
         for key in self.keys:
             # First try to remove the units, if it has one
             try:
-                bounds_uless = ((self.bounds[key][0] / fixed_units[key]).value,
-                                (self.bounds[key][1] / fixed_units[key]).value)
-                guess_uless = (self.guess[key] / fixed_units[key]).value
+                bounds_uless = ((self.bounds[key][0].to(fixed_units[key])).value,
+                                (self.bounds[key][1].to(fixed_units[key])).value)
+                guess_uless = (self.guess[key].to(fixed_units[key])).value
             # If a KeyError is raised, it means there is no unit defined, but
             # the parameter may still be an ``astropy.units.Quantity`` object
             # In this case, use its value
-            except KeyError:
+            except AttributeError:
                 try:
                     bounds_uless = self.bounds[key]
                     guess_uless = self.guess[key].value
@@ -464,7 +471,8 @@ class FullOrbit(object):
 
         # Compute the missing parameters that depend on the parametrization
         if self.parametrization == 'mc10':
-            ecc = self.lmfit_result.params['ecc']
+            log_ecc = self.lmfit_result.params['log_ecc']
+            ecc = 10 ** log_ecc
             omega = self.lmfit_result.params['omega']
             self.lmfit_result.params.add('sqe_cosw',
                                          value=np.sqrt(ecc) * np.cos(omega))
@@ -473,11 +481,12 @@ class FullOrbit(object):
         elif self.parametrization == 'exofast':
             ecc = self.lmfit_result.params['sqe_cosw'].value ** 2 + \
                   self.lmfit_result.params['sqe_sinw'].value ** 2
+            log_ecc = np.log10(ecc)
             omega = np.degrees(np.arctan2(
                 self.lmfit_result.params['sqe_sinw'].value,
                 self.lmfit_result.params['sqe_cosw'].value))
             self.lmfit_result.params.add('omega', value=omega)
-            self.lmfit_result.params.add('ecc', value=ecc)
+            self.lmfit_result.params.add('log_ecc', value=log_ecc)
 
         # Updating global variable best_params
         for key in self.keys:
@@ -561,11 +570,11 @@ if __name__ == '__main__':
                               rv_unit=u.m / u.s, target_name='HIP 19911')
     _datasets = [harps, hires]
 
-    _guess = {'k': 10 ** 0.89093152 * u.km / u.s,
-              'period': 10 ** 3.3165404 * u.d,
+    _guess = {'log_k': 0.89093152 * u.dex(u.km / u.s),
+              'log_period': 3.3165404 * u.dex(u.d),
               't0': 4629.04013 * u.d,
-              #omega': 41.2891974 * u.deg,
-              #'ecc': 10 ** (-0.08490158),
+              #'omega': 41.2891974 * u.deg,
+              #'log_ecc': -0.08490158,
               'sqe_cosw': np.sqrt(.822429) * np.cos(41.2891974 * u.deg),
               'sqe_sinw': np.sqrt(.822429) * np.sin(41.2891974 * u.deg),
               'gamma_0': 0 * u.km / u.s,
@@ -573,11 +582,11 @@ if __name__ == '__main__':
               'sigma_0': 0.001 * u.km / u.s,
               'sigma_1': 0.001 * u.km / u.s}
 
-    _bounds = {'k': (7, 8) * u.km / u.s,
-               'period': (2000, 3000) * u.d,
+    _bounds = {'log_k': (0, 1) * u.dex(u.km / u.s),
+               'log_period': (3.3, 3.5) * u.dex(u.d),
                't0': (4000, 5000) * u.d,
                #'omega': (0, 100),
-               #'ecc': (0.5, 0.9),
+               #'log_ecc': (-0.08, -0.09),
                'gamma_0': (-1, 1) * u.km / u.s,
                'gamma_1': (-4, -3) * u.km / u.s,
                'sigma_0': (0.0001, 0.5) * u.km / u.s,
@@ -585,6 +594,8 @@ if __name__ == '__main__':
 
     estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
                       parametrization='exofast')
+    #estim.plot_ds(plot_guess=True)
+    #plt.show()
     estim.lmfit_orbit(update_guess=True)
 '''
     # The probability
