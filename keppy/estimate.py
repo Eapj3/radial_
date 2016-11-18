@@ -3,6 +3,7 @@
 
 import numpy as np
 from keppy import orbit, dataset, rv_model
+import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
 import lmfit
@@ -154,9 +155,31 @@ class FullOrbit(object):
 
         # Initializing useful global variables
         self.lmfit_result = None
+        self.residuals = None
         self.best_params = {}
         for key in self.keys:
             self.best_params[key] = None
+
+    # Compute a periodogram of a data set
+    def lomb_scargle(self, dset_index, freqs):
+        """
+
+        Parameters
+        ----------
+        dset_index
+        freqs
+
+        Returns
+        -------
+
+        """
+        x_array = self.t[dset_index]
+        y_array = self.rv[dset_index]
+        pgram = ss.lombscargle(x=x_array, y=y_array, freqs=freqs)
+        fig = plt.figure(figsize=(6, 5))
+        ax = fig.add_subplot(111)
+        ax.semilogx(freqs, pgram)
+        return pgram, fig
 
     # Plot the data sets
     def plot_ds(self, rv_unit=u.km / u.s, t_unit=u.d, legend_loc=None,
@@ -193,6 +216,7 @@ class FullOrbit(object):
         gs = plt.GridSpec(2, 1, height_ratios=(4, 1))
         ax_fit = fig.add_subplot(gs[0])
 
+        self.residuals = []
         for i in range(self.n_ds):
             if plot_guess is True:
                 ax_res = fig.add_subplot(gs[1], sharex=ax_fit)
@@ -240,6 +264,7 @@ class FullOrbit(object):
 
                 # Plot the residuals
                 res = rv_guess_samepoints - rvs
+                self.residuals.append(res)
                 ax_res.errorbar(self.t[i].to(t_unit).value,
                                 res.to(rv_unit).value,
                                 yerr=self.rv_unc[i].to(rv_unit).value,
