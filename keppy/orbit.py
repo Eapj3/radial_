@@ -75,7 +75,11 @@ class BinarySystem(object):
                                  '(omega, ecc) or (sqe_cosw, sqe_sinw)')
             else:
                 self.ecc = sqe_sinw ** 2 + sqe_cosw ** 2
-                self.omega = np.arctan2(sqe_sinw, sqe_cosw)
+                if isinstance(sqe_cosw, u.Quantity) and \
+                        isinstance(sqe_sinw, u.Quantity):
+                    self.omega = np.arctan2(sqe_sinw, sqe_cosw)
+                else:
+                    self.omega = np.arctan2(sqe_sinw, sqe_cosw) * u.rad
         else:
             self.ecc = ecc
             if isinstance(omega, u.Quantity):

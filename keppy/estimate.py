@@ -438,13 +438,23 @@ class FullOrbit(object):
 
         # Fix units
         for key in self.keys:
+            # First try to remove the units, if it has one
             try:
                 bounds_uless = ((self.bounds[key][0] / fixed_units[key]).value,
                                 (self.bounds[key][1] / fixed_units[key]).value)
                 guess_uless = (self.guess[key] / fixed_units[key]).value
+            # If a KeyError is raised, it means there is no unit defined, but
+            # the parameter may still be an ``astropy.units.Quantity`` object
+            # In this case, use its value
             except KeyError:
-                bounds_uless = self.bounds[key]
-                guess_uless = self.guess[key]
+                try:
+                    bounds_uless = self.bounds[key]
+                    guess_uless = self.guess[key].value
+                # If an AttributeError is raised, it means the parameters is not
+                # an ``astropy.units.Quantity`` object
+                except AttributeError:
+                    bounds_uless = self.bounds[key]
+                    guess_uless = self.guess[key]
 
             params.add(key, guess_uless, vary=vary[key],
                        min=bounds_uless[0], max=bounds_uless[1])
@@ -554,8 +564,10 @@ if __name__ == '__main__':
     _guess = {'k': 10 ** 0.89093152 * u.km / u.s,
               'period': 10 ** 3.3165404 * u.d,
               't0': 4629.04013 * u.d,
-              'omega': 41.2891974 * u.deg,
-              'ecc': 10 ** (-0.08490158),
+              #omega': 41.2891974 * u.deg,
+              #'ecc': 10 ** (-0.08490158),
+              'sqe_cosw': np.sqrt(.822429) * np.cos(41.2891974 * u.deg),
+              'sqe_sinw': np.sqrt(.822429) * np.sin(41.2891974 * u.deg),
               'gamma_0': 0 * u.km / u.s,
               'gamma_1': -3.86723446 * u.km / u.s,
               'sigma_0': 0.001 * u.km / u.s,
@@ -564,15 +576,16 @@ if __name__ == '__main__':
     _bounds = {'k': (7, 8) * u.km / u.s,
                'period': (2000, 3000) * u.d,
                't0': (4000, 5000) * u.d,
-               'omega': (0, 100),
-               'ecc': (0.5, 0.9),
+               #'omega': (0, 100),
+               #'ecc': (0.5, 0.9),
                'gamma_0': (-1, 1) * u.km / u.s,
                'gamma_1': (-4, -3) * u.km / u.s,
                'sigma_0': (0.0001, 0.5) * u.km / u.s,
                'sigma_1': (0.0001, 0.5) * u.km / u.s}
 
-    estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True)
-    estim.lmfit_orbit()
+    estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
+                      parametrization='exofast')
+    estim.lmfit_orbit(update_guess=True)
 '''
     # The probability
     def lnprob(self, theta):
