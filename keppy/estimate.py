@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from keppy import orbit, dataset
+from keppy import orbit, dataset, rv_model
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
 import lmfit
@@ -265,86 +265,6 @@ class FullOrbit(object):
         else:
             return fig, gs
 
-    # The RV model from Murray & Correia 2010
-    @staticmethod
-    def rv_model_mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
-        """
-        The radial velocities model from Murray & Correia 2010.
-
-        Parameters
-        ----------
-        t : ``astropy.units.Quantity``
-            Time.
-
-        k : ``astropy.units.Quantity``
-            The radial velocity semi-amplitude (velocity unit).
-
-        period : scalar
-            The orbital period (time unit).
-
-        t0 : ``astropy.units.Quantity``
-            Time of pariastron passage (time unit).
-
-        omega : ``astropy.units.Quantity``
-            Argument of periapse (angle unit).
-
-        ecc : scalar
-            Eccentricity of the orbit.
-
-        gamma : ``astropy.units.Quantity``
-            Proper motion of the barycenter (velocity unit).
-
-        Returns
-        -------
-        rvs : ``astropy.units.Quantity``
-            Radial velocity.
-        """
-        k = 10 ** log_k
-        period = 10 ** log_period
-        ecc = 10 ** log_ecc
-        system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
-        rvs = system.get_rvs(t)
-        return rvs
-
-    # The RV model from EXOFAST
-    @staticmethod
-    def rv_model_exofast(t, k, period, t0, sqe_cosw, sqe_sinw, gamma):
-        """
-        The radial velocities model from EXOFAST (Eastman et al. 2013).
-
-        Parameters
-        ----------
-        t : ``astropy.units.Quantity``
-            Time.
-
-        k : ``astropy.units.Quantity``
-            The radial velocity semi-amplitude (velocity unit).
-
-        period : scalar
-            The orbital period (time unit).
-
-        t0 : ``astropy.units.Quantity``
-            Time of pariastron passage (time unit).
-
-        sqe_cosw : scalar
-            sqrt(ecc) * cos(omega).
-
-        sqe_sinw : scalar
-            sqrt(ecc) * sin(omega).
-
-        gamma : ``astropy.units.Quantity``
-            Proper motion of the barycenter (velocity unit).
-
-        Returns
-        -------
-        rvs : ``astropy.units.Quantity``
-            Radial velocity.
-        """
-        system = orbit.BinarySystem(k, period, t0, sqe_cosw=sqe_cosw,
-                                    sqe_sinw=sqe_sinw, gamma=gamma)
-        rvs = system.get_rvs(t)
-        return rvs
-
     # The log-likelihood
     def lnlike(self, theta):
         """
@@ -363,15 +283,15 @@ class FullOrbit(object):
 
             # Compute the RVs using the appropriate model
             if self.parametrization == 'mc10':
-                rvs = self.rv_model_mc10(self.t[i], v[self.keys[0]],
-                                         v[self.keys[1]], v[self.keys[2]],
-                                         v[self.keys[3]], v[self.keys[4]],
-                                         v[self.keys[5 + i]])
+                rvs = rv_model.mc10(self.t[i], v[self.keys[0]],
+                                    v[self.keys[1]], v[self.keys[2]],
+                                    v[self.keys[3]], v[self.keys[4]],
+                                    v[self.keys[5 + i]])
             elif self.parametrization == 'exofast':
-                rvs = self.rv_model_exofast(self.t[i], v[self.keys[0]],
-                                            v[self.keys[1]], v[self.keys[2]],
-                                            v[self.keys[3]], v[self.keys[4]],
-                                            v[self.keys[5 + i]])
+                rvs = rv_model.exofast(self.t[i], v[self.keys[0]],
+                                       v[self.keys[1]], v[self.keys[2]],
+                                       v[self.keys[3]], v[self.keys[4]],
+                                       v[self.keys[5 + i]])
 
             # If user wants to estimate additional sigma
             if self.use_add_sigma is False:
@@ -539,13 +459,9 @@ class FullOrbit(object):
             The prior probability for a given set of orbital and instrumental
             parameters.
         """
-        # TODO: Implement usage of MinimizerResult as an alternative
-        assert isinstance(theta, lmfit.minimizer.MinimizerResult) is False, \
-            'The use of MinimizerResult class is not implemented yet.'
-
         # Compute the eccentricity beforehand to impose a prior of e < 1 on it
         try:
-            ecc = 10 ** theta['log_e']
+            ecc = 10 ** theta['log_ecc']
         except KeyError:
             ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
 
@@ -594,8 +510,6 @@ if __name__ == '__main__':
 
     estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
                       parametrization='exofast')
-    #estim.plot_ds(plot_guess=True)
-    #plt.show()
     estim.lmfit_orbit(update_guess=True)
 '''
     # The probability
