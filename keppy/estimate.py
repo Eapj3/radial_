@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from keppy import orbit, dataset, rv_model
+from keppy import orbit, dataset, rv_model, prior
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
@@ -36,39 +36,31 @@ class FullOrbit(object):
         the data sets in the sequence will dictate which instrumental parameter
         (gamma, sigma) index correspond to each data set.
 
-    guess : ``dict`` or sequence
-        First guess of the orbital parameters in the following order. If passed
-        as a sequence, its length must be the same as the number of parameters
-        of the fit: 5 orbital parameters + N, if use_add_sigma is ``False``; or
-        5 orbital parameters + 2 * N, if use_add_sigma is ``True``, where N is
-        the number of data sets. If passed as ``dict``, they keywords must be
-        matched to the names of the parameters to be fit. These names are:
-        'k', 'period', 't0', 'omega', 'ecc', 'sqe_cosw', 'sqe_sinw',
-        'gamma', 'sigma', 'gamma_X', 'sigma_X', where 'X' is the index of the
-        data set; 'omega' and 'log_e' are used in the 'mc10' parametrization;
-        'sqe_cosw' and 'sqe_sinw' are used in the 'exofast' parametrization. If
-        passed as ``dict`` and parameters are missing, the code uses the
-        following default values: k=0.1 km/s, period=1000 days, t0=5000 days,
-        omega=180 deg, ecc=0.1, sqe_cosw=0, sqe_sinw=0, gamma=0 km/s,
-        sigma=0.001 km/s.
+    guess : ``dict``
+        First guess of the orbital parameters. The keywords must match to the
+        names of the parameters to be fit. These names are: ``'log_k'``,
+        ``'log_period'``, ``'t0'``, ``'omega'``, ``'ecc'``, ``'sqe_cosw'``,
+        ``'sqe_sinw'``, ``'gamma'``, ``'sigma'``, ``'gamma_X'``, ``'sigma_X'``,
+        where 'X' is the index of the data set; ``'omega'`` and ``'log_ecc'``
+        are used in the ``'mc10'`` parametrization; ``'sqe_cosw'`` and
+        ``'sqe_sinw'`` are used in the 'exofast' parametrization. If parameters
+        are missing, uses the following default first guesses: k=0.1 km/s,
+        period=1000 days, t0=5000 days, omega=180 deg, ecc=0.1, sqe_cosw=0,
+        sqe_sinw=0, gamma=0 km/s, sigma=0.001 km/s.
 
     bounds : ``dict`` or ``None``, optional
         Bounds of the parameter search, passed as a ``tuple`` for each
         parameter. The ``dict`` keywords must match the names of the parameters.
-        These names are: 'k', 'period', 't0', 'omega', 'ecc',
-        'sqe_cosw', 'sqe_sinw', 'gamma', 'sigma', 'gamma_X', 'sigma_X', where
-        'X' is the index of the data set; 'omega' and 'log_e' are used in the
-        'mc10' parametrization; 'sqe_cosw' and 'sqe_sinw' are used in the
-        'exofast' parametrization. If parameters are missing, the code uses the
-        following default values: k=(0.001, 1000) km/s, log_period=(1E-3, 1E5)
-        days, t0=(0, 10000) days, omega=(0, 360) deg, ecc=(1E-4, 0.999),
-        sqe_cosw=(-1, 1), sqe_sinw=(-1, 1), gamma=(-10, 10) km/s,
-        sigma=(0.0001, 1.0) km/s.
+        See the description of ``guess`` for a reference. If parameters are
+        missing, the uses the following default values: log_k=(-3, 3) dex(km/s),
+        log_period=(-3, 5) dex(days), t0=(0, 10000) days, omega=(0, 360) deg,
+        log_ecc=(-4, -0.0001), sqe_cosw=(-1, 1), sqe_sinw=(-1, 1),
+        gamma=(-10, 10) km/s, sigma=(0.0001, 1.0) km/s.
 
     parametrization: ``str``, optional
-        The options are: 'mc10' for the parametrization of Murray & Correia
-        2010, and 'exofast' for the parametrization of Eastman et al. 2013.
-        Default is 'mc10'.
+        The options are: ``'mc10'`` for the parametrization of Murray & Correia
+        2010, and ``'exofast'`` for the parametrization of Eastman et al. 2013.
+        Default is ``'mc10'``.
 
     use_add_sigma : ``bool``, optional
         If ``True``, the code will use additional parameter to estimate an extra
@@ -109,36 +101,34 @@ class FullOrbit(object):
         else:
             self.parametrization = parametrization
 
-        # Setting the parameter keywords and the bounds
-        self.keys = ['log_k', 'log_period', 't0']
-        if self.parametrization == 'mc10':
-            self.keys.append('omega')
-            self.keys.append('log_ecc')
-        elif self.parametrization == 'exofast':
-            self.keys.append('sqe_cosw')
-            self.keys.append('sqe_sinw')
+        # Setting up the guess dict ############################################
+        self.guess = {'log_k': -1 * u.dex(u.km / u.s),
+                      'log_period': 3 * u.dex(u.d),
+                      't0': 5000 * u.d,
+                      'omega': 180 * u.deg,
+                      'log_ecc': -1,
+                      'sqe_cosw': 0,
+                      'sqe_sinw': 0}
+
+        # Setting the gamma and sigma guesses
         if self.n_ds == 1:
-            self.keys.append('gamma')
-            if self.use_add_sigma is True:
-                self.keys.append('sigma')
+            self.guess['gamma'] = 0 * u.km / u.s
+            if use_add_sigma is True:
+                self.guess['sigma'] = 0.001 * u.km / u.s
         else:
             for i in range(self.n_ds):
-                self.keys.append('gamma_{}'.format(i))
-            if self.use_add_sigma is True:
-                for i in range(self.n_ds):
-                    self.keys.append('sigma_{}'.format(i))
+                self.guess['gamma_{}'.format(i)] = 0 * u.km / u.s
+                if use_add_sigma is True:
+                    self.guess['sigma_{}'.format(i)] = 0.001 * u.km / u.s
 
-        # The guess dict
-        self.guess = {}
-        if isinstance(guess, dict) is False:
-            for i in range(len(self.keys)):
-                self.guess[self.keys[i]] = guess[i]
-        elif isinstance(guess, dict) is True:
-            for key in self.keys:
-                try:
-                    self.guess[key] = guess[key]
-                except KeyError:
-                    self.guess[key] = None
+        # Finally
+        self.keys = self.guess.keys()
+        for key in self.keys:
+            try:
+                self.guess[key] = guess[key]
+            except KeyError:
+                pass
+        ########################################################################
 
         # Setting the orbital parameter bounds
         self.bounds = {}
@@ -467,36 +457,25 @@ class FullOrbit(object):
             plt.plot(t, rv_curve, label='Fit')
             plt.show()
 
-
-    # Flat priors
-    def flat(self, theta):
+    # The probability
+    def lnprob(self, theta):
         """
-        Computes a flat prior probability for a given set of parameters theta.
+        This function calculates the ln of the probabilities to be used in the
+        MCMC estimation.
 
         Parameters
         ----------
-        theta : ``dict``
-            The orbital and instrumental parameters.
+        theta: ``dict``
 
         Returns
         -------
-        prob : ``float``
-            The prior probability for a given set of orbital and instrumental
-            parameters.
+        The probability of the signal rv being the result of a model with the
+        parameters theta
         """
-        # Compute the eccentricity beforehand to impose a prior of e < 1 on it
-        try:
-            ecc = 10 ** theta['log_ecc']
-        except KeyError:
-            ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
-
-        check = [self.bounds[key][0] < theta[key] < self.bounds[key][1]
-                 for key in self.keys]
-        if all(check) is True and ecc < 1:
-            prob = 0.0
-        else:
-            prob = -np.inf
-        return prob
+        lp = prior.flat(theta)
+        if not np.isfinite(lp):
+            return -np.inf
+        return lp + self.lnlike(theta)
 
 
 if __name__ == '__main__':
@@ -535,29 +514,10 @@ if __name__ == '__main__':
 
     estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
                       parametrization='exofast')
-    estim.lmfit_orbit(update_guess=True)
+    print(estim.lnlike(_guess))
+    #estim.lmfit_orbit(update_guess=True)
+
 '''
-    # The probability
-    def lnprob(self, theta):
-        """
-        This function calculates the ln of the probabilities to be used in the
-        MCMC estimation.
-
-        Parameters
-        ----------
-        theta: ``dict``
-            The values of the orbital parameters log_k, log_period, t0, w, log_e
-
-        Returns
-        -------
-        The probability of the signal rv being the result of a model with the
-        parameters theta
-        """
-        lp = self.flat(theta)
-        if not np.isfinite(lp):
-            return -np.inf
-        return lp + self.lnlike(theta)
-
     # Using emcee to estimate the orbital parameters
     def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
                     ballsizes=1E-2):
