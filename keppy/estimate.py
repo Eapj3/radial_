@@ -144,6 +144,36 @@ class FullOrbit(object):
         for key in self.keys:
             self.best_params[key] = None
 
+        # The default bounds and guess, and the standard units
+        self.default_bounds = {'log_k': (-3, 3) * u.dex(u.km / u.s),
+                               'log_period': (-3, 5) * u.dex(u.d),
+                               't0': (0, 10000) * u.d,
+                               'omega': (0, 360) * u.deg,
+                               'log_ecc': (-4, -0.0001),
+                               'sqe_cosw': (-1, 1), 'sqe_sinw': (-1, 1),
+                               'gamma': (-10, 10) * u.km / u.s,
+                               'sigma': (1E-4, 5E-1) * u.km / u.s}
+        self.default_guess = {'log_k': -1 * u.dex(u.km / u.s),
+                              'log_period': 3 * u.dex(u.d),
+                              't0': 5000 * u.d, 'omega': 180 * u.deg,
+                              'log_ecc': -1, 'sqe_cosw': 0, 'sqe_sinw': 0,
+                              'gamma': 0 * u.km / u.s,
+                              'sigma': 0.001 * u.km / u.s}
+        self.std_units = {'log_k': u.dex(u.km / u.s), 'log_period': u.dex(u.d),
+                          't0': u.d, 'omega': u.deg, 'gamma': u.km / u.s,
+                          'sigma': u.km / u.s}
+        for i in range(self.n_ds):
+            self.default_bounds['gamma_{}'.format(i)] = \
+                self.default_bounds['gamma']
+            self.default_bounds['sigma_{}'.format(i)] = \
+                self.default_bounds['sigma']
+            self.default_guess['gamma_{}'.format(i)] = \
+                self.default_guess['gamma']
+            self.default_guess['sigma_{}'.format(i)] = \
+                self.default_guess['sigma']
+            self.std_units['gamma_{}'.format(i)] = u.km / u.s
+            self.std_units['sigma_{}'.format(i)] = u.km / u.s
+
     # Compute a periodogram of a data set
     def lomb_scargle(self, dset_index, freqs):
         """
@@ -296,7 +326,13 @@ class FullOrbit(object):
         sum_res : scalar
             The log-likelihood.
         """
-        v = theta.valuesdict()
+        try:
+            # If ``theta`` is an ``lmfit.Parameters`` object
+            v = theta.valuesdict()
+        except AttributeError:
+            # If ``theta`` is a regular ``dict`` object
+            v = theta
+
         sum_res = 0
 
         for i in range(self.n_ds):
@@ -323,6 +359,56 @@ class FullOrbit(object):
             sum_res += np.sum((self.rv[i] - rvs).value ** 2 * inv_sigma2 +
                               np.log(2. * np.pi / inv_sigma2))
         return sum_res
+
+    # Prepare an ``lmfit.Parameters`` object
+    def prepare_params(self, theta, bounds, vary):
+        """
+
+        Parameters
+        ----------
+        theta
+        bounds
+        vary
+
+        Returns
+        -------
+        params
+        """
+
+
+        params = lmfit.Parameters()
+
+        # Set the default values of bounds and guess for the missing parameters
+        for key in self.keys:
+            if bounds[key] is None:
+                bounds[key] = self.default_bounds[key]
+            if theta[key] is None:
+                theta[key] = self.default_guess[key]
+
+        # Fix units
+        for key in self.keys:
+            # First try to remove the units, if it has one
+            try:
+                bounds_uless = ((bounds[key][0].to(self.std_units[key])).value,
+                                (bounds[key][1].to(self.std_units[key])).value)
+                theta_uless = (theta[key].to(self.std_units[key])).value
+            # If a KeyError is raised, it means there is no unit defined, but
+            # the parameter may still be an ``astropy.units.Quantity`` object
+            # In this case, use its value
+            except AttributeError:
+                try:
+                    bounds_uless = bounds[key]
+                    theta_uless = theta[key].value
+                # If an AttributeError is raised, it means the parameters is not
+                # an ``astropy.units.Quantity`` object
+                except AttributeError:
+                    bounds_uless = bounds[key]
+                    theta_uless = theta[key]
+
+            params.add(key, theta_uless, vary=vary[key],
+                       min=bounds_uless[0], max=bounds_uless[1])
+
+        return params
 
     # Estimation using lmfit
     def lmfit_orbit(self, vary_param=None, verbose=True, update_guess=False,
@@ -368,60 +454,8 @@ class FullOrbit(object):
                 except KeyError:
                     pass
 
-        # The default bounds and guess
-        default_bounds = {'log_k': (-3, 3) * u.dex(u.km / u.s),
-                          'log_period': (-3, 5) * u.dex(u.d),
-                          't0': (0, 10000) * u.d,
-                          'omega': (0, 360) * u.deg, 'log_ecc': (-4, -0.0001),
-                          'sqe_cosw': (-1, 1), 'sqe_sinw': (-1, 1),
-                          'gamma': (-10, 10) * u.km / u.s,
-                          'sigma': (1E-4, 5E-1) * u.km / u.s}
-        default_guess = {'log_k': -1 * u.dex(u.km / u.s),
-                         'log_period': 3 * u.dex(u.d),
-                         't0': 5000 * u.d, 'omega': 180 * u.deg, 'log_ecc': -1,
-                         'sqe_cosw': 0, 'sqe_sinw': 0, 'gamma': 0 * u.km / u.s,
-                         'sigma': 0.001 * u.km / u.s}
-        fixed_units = {'log_k': u.dex(u.km / u.s), 'log_period': u.dex(u.d),
-                       't0': u.d, 'omega': u.deg, 'gamma': u.km / u.s,
-                       'sigma': u.km / u.s}
-        for i in range(self.n_ds):
-            default_bounds['gamma_{}'.format(i)] = default_bounds['gamma']
-            default_bounds['sigma_{}'.format(i)] = default_bounds['sigma']
-            default_guess['gamma_{}'.format(i)] = default_guess['gamma']
-            default_guess['sigma_{}'.format(i)] = default_guess['sigma']
-            fixed_units['gamma_{}'.format(i)] = u.km / u.s
-            fixed_units['sigma_{}'.format(i)] = u.km / u.s
-
-        params = lmfit.Parameters()
-
-        for key in self.keys:
-            if self.bounds[key] is None:
-                self.bounds[key] = default_bounds[key]
-            if self.guess[key] is None:
-                self.guess[key] = default_guess[key]
-
-        # Fix units
-        for key in self.keys:
-            # First try to remove the units, if it has one
-            try:
-                bounds_uless = ((self.bounds[key][0].to(fixed_units[key])).value,
-                                (self.bounds[key][1].to(fixed_units[key])).value)
-                guess_uless = (self.guess[key].to(fixed_units[key])).value
-            # If a KeyError is raised, it means there is no unit defined, but
-            # the parameter may still be an ``astropy.units.Quantity`` object
-            # In this case, use its value
-            except AttributeError:
-                try:
-                    bounds_uless = self.bounds[key]
-                    guess_uless = self.guess[key].value
-                # If an AttributeError is raised, it means the parameters is not
-                # an ``astropy.units.Quantity`` object
-                except AttributeError:
-                    bounds_uless = self.bounds[key]
-                    guess_uless = self.guess[key]
-
-            params.add(key, guess_uless, vary=vary[key],
-                       min=bounds_uless[0], max=bounds_uless[1])
+        # Prepare the ``lmfit.Parameters`` object
+        params = self.prepare_params(self.guess, self.bounds, vary)
 
         # Perform minimization
         self.lmfit_result = lmfit.minimize(self.lnlike, params,
@@ -450,7 +484,7 @@ class FullOrbit(object):
         for key in self.keys:
             self.best_params[key] = self.lmfit_result.params[key].value
             try:
-                self.best_params[key] *= fixed_units[key]
+                self.best_params[key] *= self.std_units[key]
             except KeyError:
                 pass
 
