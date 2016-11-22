@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import astropy.units as u
 
 """
 This module contains the different priors to be used with ``keppy``.
@@ -40,7 +39,10 @@ def flat(theta, bounds):
     try:
         ecc = 10 ** theta['log_ecc']
     except KeyError:
-        ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
+        try:
+            ecc = (theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2).value
+        except AttributeError:
+            ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
 
     check = [bounds[key][0] < theta[key] < bounds[key][1] for key in keys]
     if all(check) is True and ecc < 1:

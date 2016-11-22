@@ -40,13 +40,13 @@ class FullOrbit(object):
         First guess of the orbital parameters. The keywords must match to the
         names of the parameters to be fit. These names are: ``'log_k'``,
         ``'log_period'``, ``'t0'``, ``'omega'``, ``'ecc'``, ``'sqe_cosw'``,
-        ``'sqe_sinw'``, ``'gamma'``, ``'sigma'``, ``'gamma_X'``, ``'sigma_X'``,
-        where 'X' is the index of the data set; ``'omega'`` and ``'log_ecc'``
-        are used in the ``'mc10'`` parametrization; ``'sqe_cosw'`` and
-        ``'sqe_sinw'`` are used in the 'exofast' parametrization. If parameters
-        are missing, uses the following default first guesses: k=0.1 km/s,
-        period=1000 days, t0=5000 days, omega=180 deg, ecc=0.1, sqe_cosw=0,
-        sqe_sinw=0, gamma=0 km/s, sigma=0.001 km/s.
+        ``'sqe_sinw'``, ``'gamma_X'``, ``'sigma_X'``, where 'X' is the index of
+        the data set; ``'omega'`` and ``'log_ecc'`` are used in the ``'mc10'``
+        parametrization; ``'sqe_cosw'`` and ``'sqe_sinw'`` are used in the
+        'exofast' parametrization. If parameters are missing, uses the following
+        default first guesses: k=0.1 km/s, period=1000 days, t0=5000 days,
+        omega=180 deg, ecc=0.1, sqe_cosw=0, sqe_sinw=0, gamma=0 km/s,
+        sigma=0.001 km/s.
 
     bounds : ``dict`` or ``None``, optional
         Bounds of the parameter search, passed as a ``tuple`` for each
@@ -110,16 +110,10 @@ class FullOrbit(object):
                       'sqe_cosw': 0,
                       'sqe_sinw': 0}
 
-        # Setting the gamma and sigma guesses
-        if self.n_ds == 1:
-            self.guess['gamma'] = 0 * u.km / u.s
+        for i in range(self.n_ds):
+            self.guess['gamma_{}'.format(i)] = 0 * u.km / u.s
             if use_add_sigma is True:
-                self.guess['sigma'] = 0.001 * u.km / u.s
-        else:
-            for i in range(self.n_ds):
-                self.guess['gamma_{}'.format(i)] = 0 * u.km / u.s
-                if use_add_sigma is True:
-                    self.guess['sigma_{}'.format(i)] = 0.001 * u.km / u.s
+                self.guess['sigma_{}'.format(i)] = 0.001 * u.km / u.s
 
         # Finally
         self.keys = self.guess.keys()
@@ -237,10 +231,7 @@ class FullOrbit(object):
                 rv_guess_samepoints = system.get_rvs(ts=self.t[i])
 
                 # Shift the radial velocities with the provided gamma
-                if self.n_ds > 1:
-                    rvs = self.rv[i] - self.guess['gamma_{}'.format(i)]
-                else:
-                    rvs = self.rv[i] - self.guess['gamma']
+                rvs = self.rv[i] - self.guess['gamma_{}'.format(i)]
 
                 # And finally plot the data and the curve
                 ax_fit.errorbar(self.t[i].to(t_unit).value,
@@ -294,26 +285,24 @@ class FullOrbit(object):
         """
         v = theta.valuesdict()
         sum_res = 0
+
         for i in range(self.n_ds):
 
             # Compute the RVs using the appropriate model
             if self.parametrization == 'mc10':
-                rvs = rv_model.mc10(self.t[i], v[self.keys[0]],
-                                    v[self.keys[1]], v[self.keys[2]],
-                                    v[self.keys[3]], v[self.keys[4]],
-                                    v[self.keys[5 + i]])
+                rvs = rv_model.mc10(self.t[i], v['log_k'], v['log_period'],
+                                    v['t0'], v['omega'], v['log_ecc'],
+                                    v['gamma_{}'.format(i)])
             elif self.parametrization == 'exofast':
-                rvs = rv_model.exofast(self.t[i], v[self.keys[0]],
-                                       v[self.keys[1]], v[self.keys[2]],
-                                       v[self.keys[3]], v[self.keys[4]],
-                                       v[self.keys[5 + i]])
+                rvs = rv_model.exofast(self.t[i], v['log_k'], v['log_period'],
+                                    v['t0'], v['sqe_cosw'], v['sqe_sinw'],
+                                    v['gamma_{}'.format(i)])
 
             # If user wants to estimate additional sigma
             if self.use_add_sigma is False:
                 inv_sigma2 = (1. / (self.rv_unc[i] ** 2)).value
             elif self.use_add_sigma is True:
-                log_sigma_j = np.log10(theta[self.keys[5 +
-                                                       self.n_ds + i]])
+                log_sigma_j = np.log10(theta['sigma_{}'.format(i)])
                 inv_sigma2 = (1. / (self.rv_unc[i].value ** 2 +
                                     (10 ** log_sigma_j) ** 2))
 
@@ -440,23 +429,6 @@ class FullOrbit(object):
 
         return self.best_params
 
-    # Plot lmfit_orbit result and residuals
-    def plot_lmfit_result(self, fold=False):
-
-        p = self.lmfit_result.params.valuesdict()
-        if self.n_datasets == 1:
-            t = np.linspace(min(self.t) - 100, max(self.t) + 100, 1000)
-            rvs = self.rv_model_mc10(self.t, p['log_k'], p['log_period'],
-                                     p['t0'], p['omega'], p['log_e'], 0)
-            rv_curve = self.rv_model_mc10(t, p['log_k'], p['log_period'],
-                                     p['t0'], p['omega'], p['log_e'], 0)
-            resi = self.rv - rvs
-            gamma = p['gamma']
-            plt.errorbar(self.t, np.array(self.rv) - gamma, self.rv_err, fmt='o',
-                         label='Data')
-            plt.plot(t, rv_curve, label='Fit')
-            plt.show()
-
     # The probability
     def lnprob(self, theta):
         """
@@ -514,8 +486,8 @@ if __name__ == '__main__':
 
     estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
                       parametrization='exofast')
-    print(estim.lnlike(_guess))
-    #estim.lmfit_orbit(update_guess=True)
+    #print(estim.lnlike(_guess))
+    estim.lmfit_orbit(update_guess=True)
 
 '''
     # Using emcee to estimate the orbital parameters
