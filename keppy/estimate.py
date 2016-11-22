@@ -147,15 +147,24 @@ class FullOrbit(object):
     # Compute a periodogram of a data set
     def lomb_scargle(self, dset_index, freqs):
         """
+        Compute a Lomb-Scargle periodogram for a given data set using
+        ``scipy.signal.lombscargle``.
 
         Parameters
         ----------
-        dset_index
-        freqs
+        dset_index : ``int``
+            Index of the data set to have the periodogram calculated for.
+
+        freqs : ``array_like``
+            Angular frequencies for output periodogram.
 
         Returns
         -------
+        pgram : ``array_like``
+            Lomb-Scargle periodogram.
 
+        fig : ``matplotlib.pyplot.figure``
+            Periodogram plot.
         """
         x_array = self.t[dset_index]
         y_array = self.rv[dset_index]
@@ -274,14 +283,18 @@ class FullOrbit(object):
     # The log-likelihood
     def lnlike(self, theta):
         """
+        Log-likelihood of a given set of parameters to adequately describe the
+        observed data.
 
         Parameters
         ----------
-        theta
+        theta : ``dict``
+            Parameter dictionary like to ``~estimate.FullOrbit.guess``.
 
         Returns
         -------
-
+        sum_res : scalar
+            The log-likelihood.
         """
         v = theta.valuesdict()
         sum_res = 0
@@ -312,26 +325,46 @@ class FullOrbit(object):
         return sum_res
 
     # Estimation using lmfit
-    def lmfit_orbit(self, fix_param=None, verbose=True, update_guess=False):
+    def lmfit_orbit(self, vary_param=None, verbose=True, update_guess=False,
+                    minimize_mode='Nelder'):
         """
+        Perform a fit to the radial velocities datasets using
+        ``lmfit.minimize``.
 
         Parameters
         ----------
-        fix_param : ``dict``
+        vary_param : ``dict`` or ``None``, optional
+            Dictionary with keywords corresponding to each parameter, and
+            entries that are ``True`` if the parameter is to be left to vary, or
+            ``False`` if the parameter is to be fixed in the value provided by
+            the guess. If ``None``, all parameters will vary. Default is
+            ``None``.
+
+        verbose : ``bool``, optional
+            If ``True``, print output in the screen. Default is ``False``.
+
+        update_guess : ``bool``, optional
+            If ``True``, updates ``~estimate.FullOrbit.guess`` with the
+            estimated values from the minimization. Default is ``False``.
+
+        minimize_mode : ``str``, optional
+            The minimization algorithm string. See the documentation of
+            ``lmfit.minimize`` for a list of options available. Default is
+            ``'Nelder'``.
 
         Returns
         -------
         result : ``lmfit.MinimizerResult``
-
+            The resulting ``MinimizerResult`` object.
         """
         vary = {}
         for key in self.keys:
             vary[key] = True
 
-        if fix_param is not None:
+        if vary_param is not None:
             for key in self.keys:
                 try:
-                    vary[key] = fix_param[key]
+                    vary[key] = vary_param[key]
                 except KeyError:
                     pass
 
@@ -391,7 +424,8 @@ class FullOrbit(object):
                        min=bounds_uless[0], max=bounds_uless[1])
 
         # Perform minimization
-        self.lmfit_result = lmfit.minimize(self.lnlike, params, method='Nelder')
+        self.lmfit_result = lmfit.minimize(self.lnlike, params,
+                                           method=minimize_mode)
 
         # Compute the missing parameters that depend on the parametrization
         if self.parametrization == 'mc10':
