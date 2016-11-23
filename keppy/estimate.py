@@ -7,6 +7,7 @@ import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
 import lmfit
+import emcee
 import astropy.units as u
 
 """
@@ -158,6 +159,7 @@ class FullOrbit(object):
         # Initializing useful global variables
         self.lmfit_result = None
         self.residuals = None
+        self.sampler = None
         self.best_params = {}
         for key in self.keys:
             self.best_params[key] = None
@@ -484,6 +486,58 @@ class FullOrbit(object):
             return -np.inf
         return lp + self.lnlike(params)
 
+        # Using emcee to estimate the orbital parameters
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
+                    ballsizes=None):
+        """
+        Calculates samples of parameters that best fit the signal rv.
+
+        Parameters
+        ----------
+        nwalkers : ``int``
+            Number of walkers
+
+        nsteps : ``int``
+            Number of burning-in steps
+
+        p_scale : ``float``, optional
+            The proposal scale parameter. Default is 2.0.
+
+        nthreads : ``int``
+            Number of threads in your machine
+
+        ballsizes : ``dict``
+            The one-dimensional size of the volume from which to generate a
+            first position to start the chain.
+
+        Returns
+        -------
+        sampler : ``emcee.EnsembleSampler``
+            The resulting sampler object.
+        """
+        ndim = len(self.keys)
+
+        if ballsizes is None:
+            ballsizes = {}
+            for key in self.keys:
+                try:
+                    ballsizes[key] = 1E-4 * self.std_units[key]
+                except KeyError:
+                    ballsizes[key] = 1E-4
+
+        for key in self.keys:
+            try:
+                print(self.guess[key].value + ballsizes[key].value)
+            except AttributeError:
+                print(self.guess[key] + ballsizes[key])
+        pos = np.array([self.guess[key] + ballsizes[key]# * np.random.randn(ndim)
+                        for key in self.keys])
+
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
+                                        a=p_scale, threads=nthreads)
+        sampler.run_mcmc(pos, nsteps)
+        self.sampler = sampler
+
 
 if __name__ == '__main__':
 
@@ -513,7 +567,7 @@ if __name__ == '__main__':
                'log_period': (3.3, 3.5) * u.dex(u.d),
                't0': (4000, 5000) * u.d,
                'omega': (0, 100) * u.deg,
-               'log_ecc': (-0.08, -0.09),
+               'log_ecc': (-0.09, -0.08),
                'gamma_0': (-1, 1) * u.km / u.s,
                'gamma_1': (-4, -3) * u.km / u.s,
                'sigma_0': (0.0001, 0.5) * u.km / u.s,
@@ -521,52 +575,10 @@ if __name__ == '__main__':
 
     estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
                       parametrization='mc10')
-    print(estim.lnprob(_guess))
-    #estim.lmfit_orbit(update_guess=True)
+    estim.emcee_orbit(nthreads=4)
 
 '''
-    # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
-                    ballsizes=1E-2):
-        """
-        Calculates samples of parameters that best fit the signal rv.
 
-        Parameters
-        ----------
-        nwalkers : ``int``
-            Number of walkers
-
-        nsteps : ``int``
-            Number of burning-in steps
-
-        p_scale : ``float``, optional
-            The proposal scale parameter. Default is 2.0.
-
-        nthreads : ``int``
-            Number of threads in your machine
-
-        ballsizes : scalar or sequence
-            The one-dimensional size of the volume from which to generate a
-            first position to start the chain.
-
-        Returns
-        -------
-        sampler : ``emcee.EnsembleSampler``
-            The resulting sampler object.
-        """
-        if self.bounds_sj is None:
-            ndim = 5 + self.n_datasets
-        else:
-            ndim = 5 + 2 * self.n_datasets
-        if isinstance(ballsizes, float) or isinstance(ballsizes, int):
-            ballsizes = np.array([ballsizes] for i in range(ndim))
-        pos = np.array([self.guess + ballsizes * np.random.randn(ndim)
-                        for i in range(nwalkers)])
-
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        a=p_scale, threads=nthreads)
-        sampler.run_mcmc(pos, nsteps)
-        self.sampler = sampler
 
     # Plot emcee chains
     def plot_emcee_chains(self, outfile='chains.pdf', n_cols=2,
