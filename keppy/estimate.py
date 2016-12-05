@@ -7,8 +7,10 @@ import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
 import lmfit
+import corner
 import emcee
 import astropy.units as u
+import astropy.constants as c
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -125,12 +127,13 @@ class FullOrbit(object):
             self.default_guess['sqe_sinw'] = 0
         for i in range(self.n_ds):
             self.default_bounds['gamma_{}'.format(i)] = (-10, 10) * u.km / u.s
-            self.default_bounds['sigma_{}'.format(i)] = \
-                (1E-4, 5E-1) * u.km / u.s
             self.default_guess['gamma_{}'.format(i)] = 0 * u.km / u.s
-            self.default_guess['sigma_{}'.format(i)] = 0.001 * u.km / u.s
             self.std_units['gamma_{}'.format(i)] = u.km / u.s
-            self.std_units['sigma_{}'.format(i)] = u.km / u.s
+            if self.use_add_sigma is True:
+                self.default_bounds['sigma_{}'.format(i)] = \
+                    (1E-4, 5E-1) * u.km / u.s
+                self.default_guess['sigma_{}'.format(i)] = 0.001 * u.km / u.s
+                self.std_units['sigma_{}'.format(i)] = u.km / u.s
         ########################################################################
 
         # The global parameter keywords to be used in the code
@@ -465,28 +468,86 @@ class FullOrbit(object):
 
         return self.best_params
 
+    def compute_dynamics(self, main_body_mass=1.0 * u.solMass):
+        """
+        Compute the mass and semi-major axis of the companion defined by the
+        orbital parameters estimated with ``emcee``.
+
+        Parameters
+        ----------
+        main_body_mass : ``float``, optional
+            The mass of the main body which the companion orbits, in units of
+            solar masses. Default is 1.0.
+        """
+        mbm = main_body_mass
+        log_k = self.guess['log_k'].to(u.dex(u.km / u.d)).value
+        log_period = self.guess['log_period'].value
+        ecc = 10 ** self.guess['log_ecc']
+        log_2pi_grav = np.log10(2 * np.pi * c.G.to(u.km ** 3 /
+                                                  (u.solMass * u.d ** 2)).value)
+        # Logarithm of 2 * np.pi * G in units of
+        # km ** 3 * s ** (-2) * M_Sun ** (-1)
+        # ``eta`` is the numerical value of the following equation
+        # period * K * (1 - e ** 2) ** (3 / 2) / 2 * pi * G / main_body_mass
+        log_eta = log_period + 3 * log_k + \
+                  3. / 2 * np.log10(1. - ecc ** 2) - log_2pi_grav
+        eta = 10 ** log_eta / mbm.value
+
+        # Find the zeros of the third order polynomial that relates ``msini``
+        # to ``eta``. The first zero is the physical ``msini``.
+        msini = abs(np.roots([1, -eta, -2 * eta, -eta])[-1]) * u.solMass
+
+        # Compute the semi-major axis in km and convert to AU
+        semi_a = np.sqrt(c.G * msini * self.guess['log_period'].physical /
+                         self.guess['log_k'].physical / (2 * np.pi) /
+                         np.sqrt(1. - (10 ** self.guess['log_ecc']) ** 2)).to(u.AU)
+        #semi_a *= 6.68458712E-9
+        #self.dyn_mcmc = np.array([msini, semi_a])
+        return msini, semi_a
+
     # The probability
-    def lnprob(self, theta):
+    def lnprob(self, theta_list):
         """
         This function calculates the ln of the probabilities to be used in the
         MCMC estimation.
 
         Parameters
         ----------
-        theta: ``dict``
+        theta: sequence
 
         Returns
         -------
         The probability of the signal rv being the result of a model with the
         parameters theta
         """
+        # The common parameters
+        theta = {'log_k': theta_list[0] * self.std_units['log_k'],
+                 'log_period': theta_list[1] * self.std_units['log_period'],
+                 't0': theta_list[2] * self.std_units['t0']}
+
+        # Parametrization option-specific parameters
+        if self.parametrization == 'mc10':
+            theta['omega'] = theta_list[3] * self.std_units['omega']
+            theta['log_ecc'] = theta_list[4]
+        elif self.parametrization == 'exofast':
+            theta['sqe_cosw'] = theta_list[3]
+            theta['sqe_sinw'] = theta_list[4]
+
+        # Instrumental parameters
+        for i in range(self.n_ds):
+            theta['gamma_{}'.format(i)] = theta_list[5 + i] * \
+                                          self.std_units['gamma_{}'.format(i)]
+            if self.use_add_sigma is True:
+                theta['sigma_{}'.format(i)] = theta_list[5 + self.n_ds + i] * \
+                                          self.std_units['sigma_{}'.format(i)]
+
         lp = prior.flat(theta, self.bounds)
         params = self.prepare_params(theta, self.bounds)
         if not np.isfinite(lp):
             return -np.inf
-        return lp + self.lnlike(params)
+        return lp - 0.5 * self.lnlike(params)
 
-        # Using emcee to estimate the orbital parameters
+    # Using emcee to estimate the orbital parameters
     def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
                     ballsizes=None):
         """
@@ -517,24 +578,22 @@ class FullOrbit(object):
         """
         ndim = len(self.keys)
 
-        if ballsizes is None:
-            ballsizes = {}
-            for key in self.keys:
-                try:
-                    ballsizes[key] = 1E-4 * self.std_units[key]
-                except KeyError:
-                    ballsizes[key] = 1E-4
-
-        for key in self.keys:
-            try:
-                print(self.guess[key].value + ballsizes[key].value)
-            except AttributeError:
-                print(self.guess[key] + ballsizes[key])
-        pos = np.array([self.guess[key] + ballsizes[key]# * np.random.randn(ndim)
-                        for key in self.keys])
+        ballsizes = 1E-4
+        pos = [self.guess['log_k'].value, self.guess['log_period'].value,
+               self.guess['t0'].value]
+        if self.parametrization == 'mc10':
+            pos.append(self.guess['omega'].value)
+            pos.append(self.guess['log_ecc'])
+        elif self.parametrization == 'exofast':
+            pos.append(self.guess['sqe_cosw'])
+            pos.append(self.guess['sqe_sinw'])
+        for i in range(self.n_ds):
+            pos.append(self.guess['gamma_{}'.format(i)].value)
+            if self.use_add_sigma is True:
+                pos.append(self.guess['sigma_{}'.format(i)].value)
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        a=p_scale, threads=nthreads)
+                                        a=p_scale)
         sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
 
@@ -549,34 +608,41 @@ if __name__ == '__main__':
                               rv_offset='subtract_mean',
                               instrument_name='HIRES',
                               rv_unit=u.m / u.s, target_name='HIP 19911')
-    _datasets = [harps, hires]
+    #_datasets = [harps, hires]
+    _datasets = [hires]
 
-    _guess = {'log_k': 0.89093152 * u.dex(u.km / u.s),
-              'log_period': 3.3165404 * u.dex(u.d),
+    _guess = {'log_k': np.log10(0.4) * u.dex(u.km / u.s),
+              'log_period': 3.0791812 * u.dex(u.d),
+              #'log_k': 0.89093152 * u.dex(u.km / u.s),
+              #'log_period': 3.3165404 * u.dex(u.d),
               't0': 4629.04013 * u.d,
               'omega': 41.2891974 * u.deg,
-              'log_ecc': -0.08490158,
+              'log_ecc': -3,
               #'sqe_cosw': np.sqrt(.822429) * np.cos(41.2891974 * u.deg),
               #'sqe_sinw': np.sqrt(.822429) * np.sin(41.2891974 * u.deg),
-              'gamma_0': 0 * u.km / u.s,
-              'gamma_1': -3.86723446 * u.km / u.s,
-              'sigma_0': 0.001 * u.km / u.s,
-              'sigma_1': 0.001 * u.km / u.s}
+              #'gamma_0': 0 * u.km / u.s}#,
+              'gamma_0': -3.86723446 * u.km / u.s}#,
+              #'sigma_0': 0.001 * u.km / u.s,
+              #'sigma_1': 0.001 * u.km / u.s}
 
     _bounds = {'log_k': (0, 1) * u.dex(u.km / u.s),
                'log_period': (3.3, 3.5) * u.dex(u.d),
                't0': (4000, 5000) * u.d,
                'omega': (0, 100) * u.deg,
                'log_ecc': (-0.09, -0.08),
-               'gamma_0': (-1, 1) * u.km / u.s,
-               'gamma_1': (-4, -3) * u.km / u.s,
-               'sigma_0': (0.0001, 0.5) * u.km / u.s,
-               'sigma_1': (0.0001, 0.5) * u.km / u.s}
+               #'gamma_0': (-1, 1) * u.km / u.s}#,
+               'gamma_0': (-4, -3) * u.km / u.s}#,
+               #'sigma_0': (0.0001, 0.5) * u.km / u.s,
+               #'sigma_1': (0.0001, 0.5) * u.km / u.s}
 
-    estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=True,
+    estim = FullOrbit(_datasets, _guess, _bounds, use_add_sigma=False,
                       parametrization='mc10')
-    estim.emcee_orbit(nthreads=4)
-
+    _msini, _semi_a = estim.compute_dynamics(main_body_mass=0.987 * u.solMass)
+    print(_msini, _semi_a)
+    #_theta = [0.89093152, 3.3165404, 4629.04013, 41.2891974, -0.08490158,
+    #          -3.86723446]
+    #estim.emcee_orbit(nthreads=1)
+    #corner.corner(res.flatchain, truths=list(res.params.valuesdict().values()))
 '''
 
 
