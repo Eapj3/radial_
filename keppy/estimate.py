@@ -199,7 +199,7 @@ class FullOrbit(object):
 
     # Plot the data sets
     def plot_ds(self, rv_unit=u.km / u.s, t_unit=u.d, legend_loc=None,
-                symbols=None, plot_guess=False):
+                symbols=None, plot_guess=False, fold=False):
         """
         Plot the data sets.
 
@@ -240,7 +240,10 @@ class FullOrbit(object):
                 # First we figure out the bounds of the plot
                 t_min = min([min(tk.to(t_unit)) for tk in self.t]).value
                 t_max = max([max(tk.to(t_unit)) for tk in self.t]).value
-                t_guess = np.linspace(t_min, t_max, 1000) * t_unit
+                if fold is False:
+                    t_guess = np.linspace(t_min, t_max, 1000) * t_unit
+                else:
+                    t_guess = np.linspace(0, 1, 1000)
 
                 # Compute the radial velocities for the guess
                 try:
@@ -259,40 +262,76 @@ class FullOrbit(object):
                                                 sqe_cosw=self.guess['sqe_cosw'],
                                                 sqe_sinw=self.guess['sqe_sinw'],
                                                 gamma=0)
-                rv_guess = system.get_rvs(ts=t_guess)
+                if fold is False:
+                    rv_guess = system.get_rvs(ts=t_guess)
+                else:
+                    rv_guess = system.get_rvs(ts=t_guess *
+                                              self.guess['log_period'].physical)
                 rv_guess_samepoints = system.get_rvs(ts=self.t[i])
 
                 # Shift the radial velocities with the provided gamma
                 rvs = self.rv[i] - self.guess['gamma_{}'.format(i)]
 
-                # And finally plot the data and the curve
-                ax_fit.errorbar(self.t[i].to(t_unit).value,
-                                rvs.to(rv_unit).value,
-                                yerr=self.rv_unc[i].to(rv_unit).value,
-                                fmt=symbols[i],
-                                label=self.meta[i]['Instrument'])
-                ax_fit.plot(t_guess.to(t_unit).value,
-                            rv_guess.to(rv_unit).value,
-                            color='k')
-
-                # Plot the residuals
+                # Compute residuals
                 res = rv_guess_samepoints - rvs
                 self.residuals.append(res)
-                ax_res.errorbar(self.t[i].to(t_unit).value,
-                                res.to(rv_unit).value,
-                                yerr=self.rv_unc[i].to(rv_unit).value,
-                                fmt=symbols[i])
-                ax_res.set_ylabel('Residuals\n({})'.format(rv_unit))
-                plt.setp(ax_res.get_xticklabels(), visible=False)
+
+                # And finally
+                if fold is False:
+                    # Plot the data and the curve
+                    ax_fit.errorbar(self.t[i].to(t_unit).value,
+                                    rvs.to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i],
+                                    label=self.meta[i]['Instrument'])
+                    ax_fit.plot(t_guess.to(t_unit).value,
+                                rv_guess.to(rv_unit).value,
+                                color='k')
+                    # Plot the residuals
+                    ax_res.errorbar(self.t[i].to(t_unit).value,
+                                    res.to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i])
+                    ax_res.set_ylabel('Residuals\n({})'.format(rv_unit))
+                    plt.setp(ax_res.get_xticklabels(), visible=False)
+                else:
+                    # Plot the data and the curve
+                    phase = (self.t[i] / self.guess['log_period'].physical) % 1
+                    ax_fit.errorbar(phase.value,
+                                    rvs.to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i],
+                                    label=self.meta[i]['Instrument'])
+                    ax_fit.plot(t_guess,
+                                rv_guess.to(rv_unit).value,
+                                color='k')
+                    # Plot the residuals
+                    ax_res.errorbar(phase.value,
+                                    res.to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i])
+                    ax_res.set_ylabel('Residuals\n({})'.format(rv_unit))
+                    plt.setp(ax_res.get_xticklabels(), visible=False)
             else:
-                ax_fit.errorbar(self.t[i].to(t_unit).value,
-                                self.rv[i].to(rv_unit).value,
-                                yerr=self.rv_unc[i].to(rv_unit).value,
-                                fmt=symbols[i],
-                                label=self.meta[i]['Instrument'])
+                if fold is False:
+                    ax_fit.errorbar(self.t[i].to(t_unit).value,
+                                    self.rv[i].to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i],
+                                    label=self.meta[i]['Instrument'])
+                else:
+                    phase = (self.t[i] / self.guess['log_period'].physical) % 1
+                    ax_fit.errorbar(phase.value,
+                                    self.rv[i].to(rv_unit).value,
+                                    yerr=self.rv_unc[i].to(rv_unit).value,
+                                    fmt=symbols[i],
+                                    label=self.meta[i]['Instrument'])
 
         # Show the plot
-        ax_fit.set_xlabel('Time ({})'.format(t_unit))
+        if fold is False:
+            ax_fit.set_xlabel('Time ({})'.format(t_unit))
+        else:
+            ax_fit.set_xlabel('Phase')
         ax_fit.set_ylabel('Radial velocities ({})'.format(rv_unit))
         ax_fit.set_title('{}'.format(self.meta[0]['Target']))
         ax_fit.legend(loc=legend_loc, numpoints=1)
