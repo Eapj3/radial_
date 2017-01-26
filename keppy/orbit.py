@@ -189,10 +189,10 @@ if __name__ == '__main__':
 
     # First, we create an instance of the system HIP156846
     HIP156846 = BinarySystem(k=0.07998912091313012 * u.km / u.s,
-                             period=104793237.34657334 * u.d,
+                             period=1047.9323734657334 * u.d,
                              t0=-1000000 * u.d,
-                             omega=52.2 * u.deg,
-                             ecc=0,
+                             omega=152.2 * u.deg,
+                             ecc=0.3,
                              #sqe_cosw=np.sqrt(0.847) * np.cos(52.2 * u.deg),
                              #sqe_sinw=np.sqrt(0.847) * np.sin(52.2 * u.deg),
                              gamma=-68.54 * u.km / u.s)

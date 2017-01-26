@@ -199,7 +199,7 @@ class FullOrbit(object):
 
     # Plot the data sets
     def plot_ds(self, rv_unit=u.km / u.s, t_unit=u.d, legend_loc=None,
-                symbols=None, plot_guess=False, fold=False):
+                symbols=None, plot_guess=False, fold=False, numpoints=1000):
         """
         Plot the data sets.
 
@@ -241,9 +241,9 @@ class FullOrbit(object):
                 t_min = min([min(tk.to(t_unit)) for tk in self.t]).value
                 t_max = max([max(tk.to(t_unit)) for tk in self.t]).value
                 if fold is False:
-                    t_guess = np.linspace(t_min, t_max, 1000) * t_unit
+                    t_guess = np.linspace(t_min, t_max, numpoints) * t_unit
                 else:
-                    t_guess = np.linspace(0, 1, 1000)
+                    t_guess = np.linspace(0, 1, numpoints)
 
                 # Compute the radial velocities for the guess
                 try:
