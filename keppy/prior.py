@@ -40,7 +40,7 @@ def flat(theta, bounds):
         ecc = 10 ** theta['log_ecc']
     except KeyError:
         try:
-            ecc = (theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2).value
+            ecc = (theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2)
         except AttributeError:
             ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
 
