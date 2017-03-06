@@ -14,14 +14,14 @@ if sys.argv[-1] == "publish":
     sys.exit()
 
 setup(
-    name="keppy",
-    version="0.3a",
+    name="radial",
+    version="0.4a",
     author="Leonardo dos Santos",
-    author_email="ldsantos@uchicago.edu",
-    packages=["keppy"],
-    url="https://github.com/RogueAstro/MAROON-X_DRS",
+    author_email="leonardoags@usp.br",
+    packages=["radial"],
+    url="https://github.com/RogueAstro/radial",
     license="MIT",
-    description="Data reduction software for the spectrograph MAROON-X",
+    description="Radial velocities analysis with Python",
     install_requires=["numpy", "scipy", "matplotlib", "emcee", "corner",
                       "lmfit", "astropy"],
     classifiers=[

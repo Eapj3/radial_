@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from keppy import orbit
+from radial import orbit
 
 """
 This module contains the different radial velocities models currently available

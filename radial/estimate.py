@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from keppy import orbit, dataset, rv_model, prior
+from radial import orbit, dataset, rv_model, prior
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk

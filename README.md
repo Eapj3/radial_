@@ -1,4 +1,6 @@
-# keppy
+# radial
 A pure Python code for estimating radial velocities of stars with a massive companion.
 
-The newest version 0.3 uses ``lmfit`` to compute the best solution for orbital parameters of binary stars, and has a more streamlined and easier to use setup.
+The new 0.4 version uses ``lmfit`` to perform minimization, and ``emcee`` to estimate uncertainties. The support for ``astropy.units`` on parameter estimation was dropped because of performance issues.
+
+As of version 0.4, the project is now called ``radial``.
