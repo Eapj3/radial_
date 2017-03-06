@@ -16,43 +16,34 @@ def mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
 
     Parameters
     ----------
-    t : ``astropy.units.Quantity``
-        Time.
+    t : scalar
+        Time in days.
 
-    log_k : ``astropy.units.Quantity``
-        Base-10 logarithm of the radial velocity semi-amplitude
-        (dex(velocity unit)).
+    log_k : scalar
+        Base-10 logarithm of the radial velocity semi-amplitude in dex(m / s).
 
-    log_period : ``astropy.units.Quantity``
-        Base-10 logarithm of the orbital period (dex(time unit)).
+    log_period : scalar
+        Base-10 logarithm of the orbital period in dex(d).
 
-    t0 : ``astropy.units.Quantity``
-        Time of pariastron passage (time unit).
+    t0 : scalar
+        Time of pariastron passage in days.
 
-    omega : ``astropy.units.Quantity``
-        Argument of periapse (angle unit).
+    omega : scalar
+        Argument of periapse in radians.
 
     log_ecc : scalar
         Base-10 logarithm of the eccentricity of the orbit.
 
-    gamma : ``astropy.units.Quantity``
-        Proper motion of the barycenter (velocity unit).
+    gamma : scalar
+        Instrumental radial velocity offset in m / s.
 
     Returns
     -------
-    rvs : ``astropy.units.Quantity``
-        Radial velocity.
+    rvs : scalar
+        Radial velocity in m / s.
     """
-    try:
-        k = log_k.physical
-    except AttributeError:
-        k = 10 ** log_k
-
-    try:
-        period = log_period.physical
-    except AttributeError:
-        period = 10 ** log_period
-
+    k = 10 ** log_k
+    period = 10 ** log_period
     ecc = 10 ** log_ecc
     system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
     rvs = system.get_rvs(t)
@@ -66,18 +57,17 @@ def exofast(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
 
     Parameters
     ----------
-    t : ``astropy.units.Quantity``
-        Time.
+    t : scalar
+        Time in days.
 
-    log_k : ``astropy.units.Quantity``
-        Base-10 logarithm of the radial velocity semi-amplitude
-        (dex(velocity unit)).
+    log_k : scalar
+        Base-10 logarithm of the radial velocity semi-amplitude in dex(m / s).
 
-    log_period : ``astropy.units.Quantity``
-        Base-10 logarithm of the orbital period (dex(time unit)).
+    log_period : scalar
+        Base-10 logarithm of the orbital period in dex(d).
 
-    t0 : ``astropy.units.Quantity``
-        Time of pariastron passage (time unit).
+    t0 : scalar
+        Time of pariastron passage in days.
 
     sqe_cosw : scalar
         sqrt(ecc) * cos(omega).
@@ -85,24 +75,16 @@ def exofast(t, log_k, log_period, t0, sqe_cosw, sqe_sinw, gamma):
     sqe_sinw : scalar
         sqrt(ecc) * sin(omega).
 
-    gamma : ``astropy.units.Quantity``
-        Proper motion of the barycenter (velocity unit).
+    gamma : scalar
+        Instrumental radial velocity offset in m / s.
 
     Returns
     -------
-    rvs : ``astropy.units.Quantity``
-        Radial velocity.
+    rvs : scalar
+        Radial velocity in m / s.
     """
-    try:
-        k = log_k.physical
-    except AttributeError:
-        k = 10 ** log_k
-
-    try:
-        period = log_period.physical
-    except AttributeError:
-        period = 10 ** log_period
-
+    k = 10 ** log_k
+    period = 10 ** log_period
     system = orbit.BinarySystem(k, period, t0, sqe_cosw=sqe_cosw,
                                 sqe_sinw=sqe_sinw, gamma=gamma)
     rvs = system.get_rvs(t)
