@@ -2,7 +2,6 @@
 Makefile
 conf.py
 *.csv
-*.dat
 *.png
 scripts/
 
