@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -139,33 +140,3 @@ class BinarySystem(object):
         # arc-cosine is degenerate in the interval 0-360 degrees.
         rvs = self.rv_eq(f)
         return rvs
-
-
-if __name__ == '__main__':
-    import time
-    import matplotlib.pyplot as plt
-
-    print('---------------------------------------')
-    print('Starting test of keppy.orbit\n')
-    t_sim = np.linspace(3000, 5000, 1000)
-    start_time = time.time()  # We use this to measure the computation time
-
-    # First, we create an instance of the system HIP156846
-    HIP156846 = BinarySystem(k=464,
-                             period=359.51,
-                             t0=3998.1,
-                             omega=52.2 * np.pi / 180,
-                             ecc=0.847,
-                             #sqe_cosw=np.sqrt(0.847) * np.cos(52.2 * u.deg),
-                             #sqe_sinw=np.sqrt(0.847) * np.sin(52.2 * u.deg),
-                             gamma=0.0)
-
-    # The RVs are computed simply by running get_rvs()
-    _rvs = HIP156846.get_rvs(ts=t_sim)
-    print('RV calculation took %.4f seconds' % (time.time() - start_time))
-
-    # Plotting results
-    plt.plot(t_sim, _rvs)
-    plt.xlabel('Time (d)')
-    plt.ylabel('RV (m / s)')
-    plt.show()
