@@ -129,7 +129,7 @@ class FullOrbit(object):
                 self.default_guess['sigma_{}'.format(i)] = 1
 
         # The global parameter keywords to be used in the code
-        self.keys = self.default_guess.keys()
+        self.keys = list(self.default_guess.keys())
 
         # Setting up the working guess and bounds dicts ########################
         self.guess = {}
@@ -607,6 +607,7 @@ class FullOrbit(object):
                                         a=p_scale, threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
+        return sampler
 
     # Plot emcee chains
     def plot_emcee_chains(self, outfile=None, n_cols=2, fig_size=(12, 12)):
