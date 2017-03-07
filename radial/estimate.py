@@ -155,6 +155,8 @@ class FullOrbit(object):
         self.lmfit_result = None
         self.residuals = None
         self.sampler = None
+        self.emcee_chains = None
+        self.ndim = None
         self.best_params = {}
         for key in self.keys:
             self.best_params[key] = None
@@ -570,7 +572,7 @@ class FullOrbit(object):
         sampler : ``emcee.EnsembleSampler``
             The resulting sampler object.
         """
-        ndim = len(self.keys)
+        self.ndim = len(self.keys)
 
         if ballsizes is None:
             ballsizes = {'log_k': 1E-4, 'log_period': 1E-4, 't0': 1E-4,
@@ -603,17 +605,17 @@ class FullOrbit(object):
                                  ballsizes['sigma'] * np.random.normal())
             pos.append(np.array(pos_n))
 
-        sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
+        sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.lnprob,
                                         a=p_scale, threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
         return sampler
 
     # Plot emcee chains
-    def plot_emcee_chains(self, outfile=None, n_cols=2, fig_size=(12, 12)):
+    def plot_emcee_sampler(self, outfile=None, n_cols=2, fig_size=(12, 12)):
         """
-        Plot the ``emcee`` chains so that the user can check for convergence or
-        chain behavior.
+        Plot the ``emcee`` sampler so that the user can check for convergence.
+
         Parameters
         ----------
         outfile : ``str`` or ``None``, optional
@@ -629,6 +631,8 @@ class FullOrbit(object):
             tuple corresponds to the x-direction size, and the second element
             corresponds to the y-direction size. Default is (12, 12).
         """
+        # TODO: include option to plot the guess in the chains
+
         assert (self.sampler is not None), "The emcee sampler must be run " \
                                            "before plotting the chains."
         n_walkers, n_steps, n_params = np.shape(self.sampler.chain)
@@ -669,3 +673,51 @@ class FullOrbit(object):
             plt.show()
         else:
             plt.savefig(outfile)
+
+    # Make chains from sampler
+    def make_chains(self, ncut, outfile=None):
+        """
+        Make a chains object that represent the posterior distributions of the
+        orbital parameters.
+
+        Parameters
+        ----------
+        ncut : ``int``
+            Number of points of the burn-in phase to be ignored.
+
+        outfile : ``str`` or ``None``
+            A string containing the path to the file where the chains will be
+            saved. This is useful when you do not want to keep running ``emcee``
+            frequently. If ``None``, no output file is produced. Default is
+            ``None``.
+
+        Returns
+        -------
+        emcee_chains : ``numpy.ndarray``
+            The chains of the ``emcee`` run, with the burn-in phase removed.
+        """
+        emcee_chains = self.sampler.chain[:, ncut:, :].reshape((-1, self.ndim))
+        self.emcee_chains = emcee_chains
+
+        # Save chains to file
+        if isinstance(outfile, str):
+            np.save(outfile, self.emcee_chains)
+        elif outfile is None:
+            pass
+        else:
+            raise TypeError('``outfile`` must be a string or None.')
+
+        return emcee_chains
+
+    # Make a corner plot
+    def plot_corner(self):
+        """
+        Produce a corner (a.k.a. triangle) plot of the posterior distributions
+        of the orbital parameters estimated with ``emcee``.
+
+        Returns
+        -------
+        fig :
+        """
+        fig = corner.corner(self.emcee_chains, labels=self.labels)
+        return fig
