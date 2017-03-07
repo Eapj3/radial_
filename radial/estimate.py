@@ -481,7 +481,7 @@ class FullOrbit(object):
         log_k = self.guess['log_k']
         log_period = self.guess['log_period']
         ecc = 10 ** self.guess['log_ecc']
-        grav = c.G.to(u.km ** 3 / (u.solMass * u.d ** 2)).value
+        grav = c.G.to(u.m ** 3 / (u.solMass * u.d ** 2)).value
         log_2pi_grav = np.log10(2 * np.pi * grav)
         # Logarithm of 2 * np.pi * G in units of
         # km ** 3 * s ** (-2) * M_Sun ** (-1)
@@ -572,24 +572,102 @@ class FullOrbit(object):
         """
         ndim = len(self.keys)
 
-        ballsizes = 1E-4
-        pos = [self.guess['log_k'].value, self.guess['log_period'].value,
-               self.guess['t0'].value]
-        if self.parametrization == 'mc10':
-            pos.append(self.guess['omega'].value)
-            pos.append(self.guess['log_ecc'])
-        elif self.parametrization == 'exofast':
-            pos.append(self.guess['sqe_cosw'])
-            pos.append(self.guess['sqe_sinw'])
-        for i in range(self.n_ds):
-            pos.append(self.guess['gamma_{}'.format(i)].value)
-            if self.use_add_sigma is True:
-                pos.append(self.guess['sigma_{}'.format(i)].value)
+        if ballsizes is None:
+            ballsizes = {'log_k': 1E-4, 'log_period': 1E-4, 't0': 1E-4,
+                         'omega': 1E-4, 'log_ecc': 1E-4, 'sqe_cosw': 1E-4,
+                         'sqe_sinw': 1E-4, 'gamma': 1E-4, 'sigma': 1E-4}
+
+        # Creating the pos array
+        pos = []
+        for n in range(nwalkers):
+            pos_n = [self.guess['log_k'] + ballsizes['log_k'] *
+                     np.random.normal(),
+                     self.guess['log_period'] + ballsizes['log_period'] *
+                     np.random.normal(),
+                     self.guess['t0'] + ballsizes['t0'] * np.random.normal()]
+            if self.parametrization == 'mc10':
+                pos_n.append(self.guess['omega'] + ballsizes['omega'] *
+                             np.random.normal())
+                pos_n.append(self.guess['log_ecc'] + ballsizes['log_ecc'] *
+                                        np.random.normal())
+            elif self.parametrization == 'exofast':
+                pos_n.append(self.guess['sqe_cosw'] + ballsizes['sqe_cosw'] *
+                             np.random.normal())
+                pos_n.append(self.guess['sqe_sinw'] + ballsizes['sqe_sinw'] *
+                             np.random.normal())
+            for i in range(self.n_ds):
+                pos_n.append(self.guess['gamma_{}'.format(i)] +
+                             ballsizes['gamma'] * np.random.normal())
+                if self.use_add_sigma is True:
+                    pos_n.append(self.guess['sigma_{}'.format(i)] +
+                                 ballsizes['sigma'] * np.random.normal())
+            pos.append(np.array(pos_n))
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.lnprob,
-                                        a=p_scale)
+                                        a=p_scale, threads=nthreads)
         sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
+
+    # Plot emcee chains
+    def plot_emcee_chains(self, outfile=None, n_cols=2, fig_size=(12, 12)):
+        """
+        Plot the ``emcee`` chains so that the user can check for convergence or
+        chain behavior.
+        Parameters
+        ----------
+        outfile : ``str`` or ``None``, optional
+            Name of the output image file to be saved. If ``None``, then no
+            output file is produced, and the plot is displayed on screen.
+            Default is ``None``.
+
+        n_cols : ``int``, optional
+            Number of columns of the plot. Default is 2.
+
+        fig_size : tuple, optional
+            Sizes of each panel of the plot, where the first element of the
+            tuple corresponds to the x-direction size, and the second element
+            corresponds to the y-direction size. Default is (12, 12).
+        """
+        assert (self.sampler is not None), "The emcee sampler must be run " \
+                                           "before plotting the chains."
+        n_walkers, n_steps, n_params = np.shape(self.sampler.chain)
+
+        # Dealing with the number of rows for the plot
+        if n_params % n_cols > 0:
+            n_rows = n_params // n_cols + 1
+        else:
+            n_rows = n_params // n_cols
+
+        # The labels
+        if self.parametrization == 'mc10':
+            self.labels = [r'$\log{K}$', r'$\log{T}$', r'$t_0$', r'$\omega$',
+                           r'$e$']
+        elif self.parametrization == 'exofast':
+            self.labels = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
+                           r'$\sqrt{e} \cos{\omega}$',
+                           r'$\sqrt{e} \sin{\omega}$']
+        for i in range(self.n_ds):
+            self.labels.append(r'$\gamma_{}$'.format(i))
+            if self.use_add_sigma is True:
+                self.labels.append(r'$\sigma_{}$'.format(i))
+
+        # Finally Do the actual plot
+        ind = 0  # The parameter index
+        fig, axes = plt.subplots(ncols=n_cols, nrows=n_rows, sharex=True,
+                                 figsize=fig_size)
+        for i in range(n_cols):
+            for k in range(n_rows):
+                if ind < len(self.labels):
+                    axes[k, i].plot(self.sampler.chain[:, :, ind].T)
+                    axes[k, i].set_ylabel(self.labels[ind])
+                    ind += 1
+                else:
+                    pass
+            plt.xlabel('Step number')
+        if outfile is None:
+            plt.show()
+        else:
+            plt.savefig(outfile)
 
 
 if __name__ == '__main__':
