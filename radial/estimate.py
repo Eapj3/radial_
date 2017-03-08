@@ -192,8 +192,8 @@ class FullOrbit(object):
         return pgram, fig
 
     # Plot the data sets
-    def plot_ds(self, legend_loc=None, symbols=None, plot_guess=False,
-                fold=False, numpoints=1000):
+    def plot_rvs(self, legend_loc=None, symbols=None, plot_guess=False,
+                plot_samples=False, fold=False, numpoints=1000):
         """
         Plot the data sets.
 
@@ -210,7 +210,24 @@ class FullOrbit(object):
         plot_guess : ``bool``, optional
             If ``True``, also plots the guess as a black curve, and the RVs of
             each data set is shifted by its respective gamma value.
+
+        plot_samples : ``bool``, optional
+            If ``True``, also plots the samples obtained with the ``emcee``
+            estimation. Default is ``False``.
+
+        fold : ``bool``, optional
+            If ``True``, plot the radial velocities by folding them around the
+            estimated orbital period. Default is ``False``.
+
+        numpoints : ``int``, optional
+            Number of points to compute the radial velocities curve. Default is
+            ``1000``.
         """
+        # Plot of emcee samples is not implemented yet.
+        if plot_samples is True:
+            raise NotImplementedError('Plot of emcee samples is not supported'
+                                      'yet.')
+
         # Use matplotlib's default symbols if ``None`` is passed.
         if symbols is None:
             markers = mrk.MarkerStyle()
@@ -645,16 +662,16 @@ class FullOrbit(object):
 
         # The labels
         if self.parametrization == 'mc10':
-            self.labels = [r'$\log{K}$', r'$\log{T}$', r'$t_0$', r'$\omega$',
-                           r'$e$']
+            self.labels = ['\log{K}', '\log{T}', 't_0', '\omega',
+                           'e']
         elif self.parametrization == 'exofast':
-            self.labels = [r'$\log{K}$', r'$\log{T}$', r'$t_0$',
-                           r'$\sqrt{e} \cos{\omega}$',
-                           r'$\sqrt{e} \sin{\omega}$']
+            self.labels = ['\log{K}', '\log{T}', 't_0',
+                           '\sqrt{e} \cos{\omega}',
+                           '\sqrt{e} \sin{\omega}']
         for i in range(self.n_ds):
-            self.labels.append(r'$\gamma_{}$'.format(i))
+            self.labels.append('\gamma_{}'.format(i))
             if self.use_add_sigma is True:
-                self.labels.append(r'$\sigma_{}$'.format(i))
+                self.labels.append('\sigma_{}'.format(i))
 
         # Finally Do the actual plot
         ind = 0  # The parameter index
@@ -664,7 +681,7 @@ class FullOrbit(object):
             for k in range(n_rows):
                 if ind < len(self.labels):
                     axes[k, i].plot(self.sampler.chain[:, :, ind].T)
-                    axes[k, i].set_ylabel(self.labels[ind])
+                    axes[k, i].set_ylabel(r'$%s$' % (self.labels[ind]))
                     ind += 1
                 else:
                     pass
@@ -721,3 +738,44 @@ class FullOrbit(object):
         """
         fig = corner.corner(self.emcee_chains, labels=self.labels)
         return fig
+
+    # Print emcee result
+    def print_emcee_result(self):
+        """
+
+        Returns
+        -------
+
+        """
+        percentiles = zip(*np.percentile(self.emcee_chains, [16, 50, 84],
+                                         axis=0))
+        result = list(map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), percentiles))
+
+        # Print raw results in a LaTeX friendly manner
+        print('Raw results:')
+        for i in range(len(self.labels)):
+            print(self.labels[i], '= %.5f^{+%.5f}_{-%.5f}' %
+                  (result[i][0], result[i][1], result[i][2]))
+
+        # Work out the human-friendly results
+        hf_labels = ['K', 'T', 't_0', '\omega', 'e']
+        units = ['m / s', 'd', 'd', 'deg', ' ']
+        hf_chains = np.array(self.emcee_chains)         # K and T from log to
+        hf_chains[:, 0:2] = 10 ** (hf_chains[:, 0:2])   # linear
+        if self.parametrization == 'mc10':
+            hf_chains[:, 3] = hf_chains[:, 3] * 180 / np.pi # rad to degrees
+            hf_chains[:, 4] = 10 ** hf_chains[:, 4]         # log to linear
+        elif self.parametrization == 'exofast':
+            # Transform sqe_cosw and sqe_sinw to omega and ecc
+            omega = (np.arctan2(hf_chains[:, 4], hf_chains[:, 3])) * 180 / np.pi
+            ecc = hf_chains[:, 3] ** 2 + hf_chains[:, 4] ** 2
+            hf_chains[:, 3] = omega
+            hf_chains[:, 4] = ecc
+        hf_perc = zip(*np.percentile(hf_chains, [16, 50, 84], axis=0))
+        hf_result = list(map(lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
+                             hf_perc))
+
+        print('\nHuman-friendly results:')
+        for i in range(len(hf_labels)):
+            print(hf_labels[i], '= %.5f^{+%.5f}_{-%.5f} %s' %
+                  (hf_result[i][0], hf_result[i][1], hf_result[i][2], units[i]))
