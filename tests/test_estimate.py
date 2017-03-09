@@ -41,3 +41,6 @@ result_mc10 = estim.lmfit_orbit(update_guess=False, verbose=False)
 estim = estimate.FullOrbit([w16], guess, bounds, use_add_sigma=False,
                            parametrization='exofast')
 result_exofast = estim.lmfit_orbit(update_guess=False, verbose=False)
+
+# Test emcee estimation
+result_emcee = estim.emcee_orbit(nthreads=2)
