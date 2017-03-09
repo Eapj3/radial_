@@ -501,29 +501,26 @@ class FullOrbit(object):
             The mass of the main body which the companion orbits, in units of
             solar masses. Default is 1.0.
         """
-        mbm = main_body_mass
-        log_k = self.guess['log_k']
-        log_period = self.guess['log_period']
-        ecc = 10 ** self.guess['log_ecc']
-        grav = c.G.to(u.m ** 3 / (u.solMass * u.d ** 2)).value
-        log_2pi_grav = np.log10(2 * np.pi * grav)
-        # Logarithm of 2 * np.pi * G in units of
-        # km ** 3 * s ** (-2) * M_Sun ** (-1)
-        # ``eta`` is the numerical value of the following equation
-        # period * K * (1 - e ** 2) ** (3 / 2) / 2 * pi * G / main_body_mass
-        log_eta = log_period + 3 * log_k + \
-                  3. / 2 * np.log10(1. - ecc ** 2) - log_2pi_grav
-        eta = 10 ** log_eta / mbm
+        mbm = main_body_mass * u.solMass
+        k = 10 ** self.guess['log_k'] * u.m / u.s
+        period = 10 ** self.guess['log_period'] * u.d
+        try:
+            ecc = 10 ** self.guess['log_ecc']
+        except KeyError:
+            ecc = self.guess['sqe_sinw'] ** 2 + self.guess['sqe_cosw'] ** 2
 
-        # Find the zeros of the third order polynomial that relates ``msini``
-        # to ``eta``. The first zero is the physical ``msini``.
-        msini = abs(np.roots([1, -eta, -2 * eta, -eta])[-1])
+        # Compute mass function f
+        f = (period * k ** 3 * (1 - ecc ** 2) ** (3 / 2) /
+             (2 * np.pi * c.G)).to(u.solMass)
+
+        # Compute msini
+        msini = abs(np.roots([1, -f.value, -2 * mbm.value * f.value,
+                              -mbm.value ** 2 * f.value])[0]) * u.solMass
 
         # Compute the semi-major axis in km and convert to AU
-        semi_a = np.sqrt(grav * msini * 10 ** self.guess['log_period'] /
-                         10 ** self.guess['log_k'] / (2 * np.pi) /
-                         np.sqrt(1. - ecc) ** 2)
-        return msini, semi_a
+        semi_a = (np.sqrt(c.G * msini * period / k / (2 * np.pi) /
+                         np.sqrt(1. - ecc) ** 2)).to(u.AU)
+        return msini.value, semi_a.value
 
     # The probability
     def lnprob(self, theta_list):
