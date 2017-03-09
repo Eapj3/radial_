@@ -16,7 +16,13 @@ system.
 # The main star class
 class MainStar(object):
     """
+    The main star of a given system.
 
+    mass : ``astropy.units.Quantity``
+        The mass of the star.
+
+    name : ``str`` or ``None``
+        The name of the star. Default is ``None``.
     """
     def __init__(self, mass, name=None):
         self.mass = mass
@@ -26,24 +32,36 @@ class MainStar(object):
 # The companion sub-class
 class Companion(object):
     """
+    The massive companion class. It can be either a binary star, an exoplanet,
+    maybe even a black hole! It can be anything that has a mass and orbits
+    another massive object. General relativity effects are not implemented yet.
 
     Parameters
     ----------
     k : ``astropy.units.Quantity`` or ``None``, optional
+        The radial velocity semi-amplitude. Default is ``None``.
 
     period_orb : ``astropy.units.Quantity`` or ``None``, optional
+        The orbital period. Default is ``None``.
 
     t_0 : ``astropy.units.Quantity`` or ``None``, optional
+        The time of periastron passage. Default is ``None``.
 
     omega : ``astropy.units.Quantity`` or ``None``, optional
+        Argument of periapse. Default is ``None``.
 
     ecc : ``float`` or ``None``, optional
+        Eccentricity of the orbit. Default is ``None``.
 
     msini : ``astropy.units.Quantity`` or ``None``, optional
+        Mass of the companion multiplied by sine of the inclination of the
+        orbital plane in relation to the line of sight. Default is ``None``.
 
     semi_a : ``astropy.units.Quantity`` or ``None``, optional
+        Semi-major axis of the orbit. Default is ``None``.
 
     name : ``str`` or ``None``, optional
+        Name of the companion. Default is ``None``.
     """
     def __init__(self, k=None, period_orb=None, t_0=None, omega=None, ecc=None,
                  msini=None, semi_a=None, name=None, main_star=None):
@@ -61,6 +79,7 @@ class Companion(object):
 # The star-companion system class
 class System(object):
     """
+    The star-companions system class.
 
     Parameters
     ----------
@@ -86,10 +105,9 @@ class System(object):
     # Compute mass functions of the companions
     def mass_func(self):
         """
-
-        Returns
-        -------
-
+        Compute the mass functions of all the companions of the system. This
+        method will also compute the msini and semi_a of the companions and
+        save the values in their respective parameters.
         """
         for comp in self.companions:
             assert isinstance(comp.k, u.Quantity), 'k needs to be provided.'
