@@ -6,6 +6,9 @@ from __future__ import (absolute_import, division, print_function,
 import numpy as np
 import astropy.units as u
 import astropy.constants as c
+import matplotlib.pyplot as plt
+import matplotlib.markers as mrk
+from radial import orbit
 
 """
 This module contains the massive object classes that make up a star-planet
@@ -27,6 +30,12 @@ class MainStar(object):
     def __init__(self, mass, name=None):
         self.mass = mass
         self.name = name
+
+        # The radial velocities corresponding to each individual companion
+        self.radial_v_ind = []
+
+        # The total radial velocities
+        self.radial_v = None
 
 
 # The companion sub-class
@@ -90,14 +99,19 @@ class System(object):
         Python list containing the all the ``radial.object.Companion`` of the
         system.
 
+    time : ``astropy.units.Quantity`` or ``None``
+        A scalar or ``numpy.ndarray`` containing the times in which the radial
+        velocities are measured. Default is ``None``.
+
     name : ``str`` or ``None``, optional
         Name of the system. Default is ``None``.
     """
-    def __init__(self, main_star, companions, name=None):
+    def __init__(self, main_star, companions, time=None, name=None):
         self.name = name
         self.main_star = main_star
         self.companions = companions
         self.n_c = len(self.companions)     # Number of companions
+        self.time = time
 
         # Initializing useful global parameters
         self.f = []
@@ -124,3 +138,59 @@ class System(object):
             comp.semi_a = (np.sqrt(c.G / comp.k * comp.msini * comp.period_orb /
                            (2 * np.pi * np.sqrt(1 - comp.ecc ** 2)))).to(u.AU)
             self.f.append(f)
+
+    # Compute the radial velocities of the main star
+    def compute_rv(self):
+        """
+
+        Parameters
+        ----------
+        time : ``astropy.units.Quantity``
+
+        """
+        ts = self.time.to(u.d).value
+        star = self.main_star
+        for comp in self.companions:
+            subsystem = orbit.BinarySystem(k=comp.k.to(u.m / u.s).value,
+                                           period=comp.period_orb.to(u.d).value,
+                                           t0=comp.t_0.to(u.d).value,
+                                           omega=comp.omega.to(u.rad).value,
+                                           ecc=comp.ecc)
+            star.radial_v_ind.append(subsystem.get_rvs(ts))
+        star.radial_v_ind = np.array(star.radial_v_ind)
+
+        # Combine the individual radial velocities to compose the total
+        star.radial_v = np.sum(star.radial_v_ind, axis=0) * u.m / u.s
+        star.radial_v_ind = star.radial_v_ind * u.m / u.s
+
+    # Plot radial velocities of the main star
+    def plot_rv(self, companion_index=None):
+        """
+
+        Parameters
+        ----------
+        companion_index : ``int`` or ``None``
+            The companion index indicates which set of radial velocities will be
+            plotted. If ``None``, then the total radial velocities are plotted.
+            Default is ``None``.
+
+        Returns
+        -------
+
+        """
+        fig, ax = plt.subplots()
+        star = self.main_star
+        i = companion_index
+
+        if i is None:
+            ax.plot(self.time, star.radial_v)
+            ax.set_xlabel('Time ({})'.format(str(self.time.unit)))
+            ax.set_ylabel('Radial velocities ({})'.format(
+                str(star.radial_v.unit)))
+        else:
+            ax.plot(self.time, star.radial_v_ind[i])
+            ax.set_xlabel('Time ({})'.format(str(self.time.unit)))
+            ax.set_ylabel('Radial velocities ({})'.format(
+                str(star.radial_v_ind[i].unit)))
+
+        return fig, ax
