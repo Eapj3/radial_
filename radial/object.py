@@ -7,7 +7,6 @@ import numpy as np
 import astropy.units as u
 import astropy.constants as c
 import matplotlib.pyplot as plt
-import matplotlib.markers as mrk
 from radial import orbit
 
 """
@@ -105,13 +104,19 @@ class System(object):
 
     name : ``str`` or ``None``, optional
         Name of the system. Default is ``None``.
+
+    dataset : sequence, ``radial.dataset.RVDataSet`` or ``None``, optional
+        A list of ``RVDataSet`` objects or one ``RVDataSet`` object that
+        contains the data to be fit. Default is ``None``.
     """
-    def __init__(self, main_star, companions, time=None, name=None):
+    def __init__(self, main_star, companion, time=None, name=None,
+                 dataset=None):
         self.name = name
         self.main_star = main_star
-        self.companions = companions
-        self.n_c = len(self.companions)     # Number of companions
+        self.companion = companion
+        self.n_c = len(self.companion)     # Number of companions
         self.time = time
+        self.dataset = dataset
 
         # Initializing useful global parameters
         self.f = []
@@ -123,7 +128,7 @@ class System(object):
         method will also compute the msini and semi_a of the companions and
         save the values in their respective parameters.
         """
-        for comp in self.companions:
+        for comp in self.companion:
             assert isinstance(comp.k, u.Quantity), 'k needs to be provided.'
             assert isinstance(comp.period_orb, u.Quantity), 'period_orb ' \
                                                             'needs to be ' \
@@ -142,15 +147,12 @@ class System(object):
     # Compute the radial velocities of the main star
     def compute_rv(self):
         """
-
-        Parameters
-        ----------
-        time : ``astropy.units.Quantity``
-
+        Compute the radial velocities of the main star, both the individual RVs
+        (corresponding to each companion) and the total RVs.
         """
         ts = self.time.to(u.d).value
         star = self.main_star
-        for comp in self.companions:
+        for comp in self.companion:
             subsystem = orbit.BinarySystem(k=comp.k.to(u.m / u.s).value,
                                            period=comp.period_orb.to(u.d).value,
                                            t0=comp.t_0.to(u.d).value,
@@ -176,7 +178,9 @@ class System(object):
 
         Returns
         -------
+        fig :
 
+        ax :
         """
         fig, ax = plt.subplots()
         star = self.main_star
