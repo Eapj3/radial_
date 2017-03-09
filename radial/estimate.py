@@ -156,6 +156,7 @@ class FullOrbit(object):
 
         # Initializing useful global variables
         self.lmfit_result = None
+        self.lmfit_chisq = None
         self.residuals = None
         self.sampler = None
         self.emcee_chains = None
@@ -474,6 +475,7 @@ class FullOrbit(object):
         # Perform minimization
         self.lmfit_result = lmfit.minimize(self.lnlike, params,
                                            method=minimize_mode)
+        self.lmfit_chisq = self.lmfit_result.chisqr
 
         # Updating global variable best_params
         for key in self.keys:
