@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import (division, print_function, absolute_import,
+                        unicode_literals)
+
 import numpy as np
 from radial import orbit, dataset, rv_model, prior
 import scipy.signal as ss
