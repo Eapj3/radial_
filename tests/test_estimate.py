@@ -36,4 +36,4 @@ result_mc10 = estim.lmfit_orbit(update_guess=True, verbose=False)
 # Test emcee estimation
 result_emcee = estim.emcee_orbit(nthreads=12, nsteps=500)
 estim.make_chains(200)
-estim.print_emcee_result(0.954)
+estim.print_emcee_result(0.954, 0.006)

@@ -467,10 +467,7 @@ class FullOrbit(object):
         mbm = main_body_mass * u.solMass
         k = self.guess['k'] * u.m / u.s
         period = self.guess['period'] * u.d
-        if self.parametrization == 'mc10':
-            ecc = self.guess['ecc']
-        elif self.parametrization == 'exofast':
-            ecc = self.guess['sqe_sinw'] ** 2 + self.guess['sqe_cosw'] ** 2
+        ecc = self.guess['ecc']
 
         # Compute mass function f
         f = (period * k ** 3 * (1 - ecc ** 2) ** (3 / 2) /
@@ -587,9 +584,13 @@ class FullOrbit(object):
                 pos_n.append(self.guess['ecc'] + ballsizes['ecc'] *
                                         np.random.normal())
             elif self.parametrization == 'exofast':
-                pos_n.append(self.guess['sqe_cosw'] + ballsizes['sqe_cosw'] *
+                sqe_cosw = np.sqrt(self.guess['ecc']) * \
+                           np.cos(self.guess['omega'])
+                sqe_sinw = np.sqrt(self.guess['ecc']) * \
+                           np.sin(self.guess['omega'])
+                pos_n.append(sqe_cosw + ballsizes['sqe_cosw'] *
                              np.random.normal())
-                pos_n.append(self.guess['sqe_sinw'] + ballsizes['sqe_sinw'] *
+                pos_n.append(sqe_sinw + ballsizes['sqe_sinw'] *
                              np.random.normal())
             for i in range(self.n_ds):
                 pos_n.append(self.guess['gamma_{}'.format(i)] +
@@ -706,7 +707,7 @@ class FullOrbit(object):
         return fig
 
     # Print emcee result
-    def print_emcee_result(self, main_star_mass=None):
+    def print_emcee_result(self, main_star_mass=None, mass_sigma=None):
         """
 
         Returns
@@ -743,7 +744,13 @@ class FullOrbit(object):
 
         # Compute mass and semi-major axis of the orbit
         if main_star_mass is not None:
-            msm = main_star_mass * u.solMass
+            if mass_sigma is None:
+                msm = np.array([main_star_mass for i in
+                                range(len(hf_chains[:, 0]))]) * u.solMass
+            else:
+                msm = np.random.normal(loc=main_star_mass,
+                                       scale=mass_sigma,
+                                       size=len(hf_chains[:, 0])) * u.solMass
             k = hf_chains[:, 0] * u.m / u.s
             period = hf_chains[:, 1] * u.d
             ecc = hf_chains[:, 4]
@@ -752,8 +759,9 @@ class FullOrbit(object):
             msini = []
             for i in range(len(f)):
                 msini.append(abs(np.roots([1,  -f[i].value,
-                                           -2 * msm.value * f[i].value,
-                                           -msm.value ** 2 * f[i].value])[0]))
+                                           -2 * msm[i].value * f[i].value,
+                                           -msm[i].value ** 2 * f[i].value])[0])
+                             )
             msini = np.array(msini) * u.solMass
             semi_a = (np.sqrt(c.G * msini * period / k / (2 * np.pi) /
                               np.sqrt(1. - ecc) ** 2)).to(u.AU)
