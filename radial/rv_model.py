@@ -10,7 +10,7 @@ with keppy.
 
 
 # The RV model from Murray & Correia 2010
-def mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
+def mc10(t, log_k, log_period, t0, omega, ecc, gamma):
     """
     The radial velocities model from Murray & Correia 2010.
 
@@ -31,7 +31,7 @@ def mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
     omega : scalar
         Argument of periapse in radians.
 
-    log_ecc : scalar
+    ecc : scalar
         Base-10 logarithm of the eccentricity of the orbit.
 
     gamma : scalar
@@ -44,7 +44,6 @@ def mc10(t, log_k, log_period, t0, omega, log_ecc, gamma):
     """
     k = 10 ** log_k
     period = 10 ** log_period
-    ecc = 10 ** log_ecc
     system = orbit.BinarySystem(k, period, t0, omega, ecc, gamma=gamma)
     rvs = system.get_rvs(t)
     return rvs
