@@ -9,7 +9,7 @@ This module contains the different priors to be used with ``keppy``.
 
 
 # Flat priors
-def flat(theta, bounds):
+def flat(theta, parametrization):
     """
     Computes a flat prior probability for a given set of parameters theta.
 
@@ -21,12 +21,6 @@ def flat(theta, bounds):
         of data sets, the parametrization option and if the additional
         uncertainties are also being estimated.
 
-    bounds : ``dict``
-        Bounds for the priors. This dictionary has the same keywords as
-        ``theta``. Each entry has to be a sequence of size two, in which the
-        first is the lower bound and the second is the higher bound. Example:
-        ``bounds = {'log_k': (-1, 1), 'log_period': (1, 4)}``.
-
     Returns
     -------
     prob : ``float``
@@ -36,17 +30,40 @@ def flat(theta, bounds):
     keys = theta.keys()
 
     # Compute the eccentricity beforehand to impose a prior of e < 1 on it
-    try:
-        ecc = 10 ** theta['log_ecc']
-    except KeyError:
-        try:
-            ecc = (theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2)
-        except AttributeError:
-            ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
+    if parametrization == 'mc10':
+        ecc = theta['ecc']
+        omega = theta['omega']
+    elif parametrization == 'exofast':
+        ecc = theta['sqe_cosw'] ** 2 + theta['sqe_sinw'] ** 2
+        omega = np.arctan2(theta['sqe_sinw'], theta['sqe_cosw'])
+    else:
+        raise ValueError('The parametrization has to be either "mc10" or '
+                         '"exofast".')
 
-    check = [bounds[key][0] < theta[key] < bounds[key][1] for key in keys]
-    if all(check) is True and ecc < 1:
+    check = []
+
+    # Eccentricity must be between 0 and 1
+    if 0 < ecc < 1:
+        check.append(True)
+    else:
+        check.append(False)
+
+    # sqe_cosw and sqe_sinw must be between -1 and 1
+    if parametrization == 'exofast':
+        if -1 < theta['sqe_cosw'] < 1 and -1 < theta['sqe_sinw'] < 1:
+            check.append(True)
+        else:
+            check.append(False)
+
+    # omega must be between -pi and pi
+    if -np.pi < omega < np.pi:
+        check.append(True)
+    else:
+        check.append(False)
+
+    if all(check) is True:
         prob = 0.0
     else:
         prob = -np.inf
+
     return prob

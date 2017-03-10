@@ -24,9 +24,9 @@ guess = {'k': 6314,
          'sigma_0': 50}
 
 # Perform LMFIT estimation using the MC10 parametrization
-estim = estimate.FullOrbit([w16], guess, use_add_sigma=True,
+estim = estimate.FullOrbit([w16], guess, use_add_sigma=False,
                            parametrization='mc10')
-result_mc10 = estim.lmfit_orbit(update_guess=True, verbose=True)
+result_mc10 = estim.lmfit_orbit(update_guess=True, verbose=False)
 
 # Perform LMFIT estimation using the EXOFAST parametrization
 #estim = estimate.FullOrbit([w16], guess, use_add_sigma=True,
@@ -34,4 +34,6 @@ result_mc10 = estim.lmfit_orbit(update_guess=True, verbose=True)
 #result_exofast = estim.lmfit_orbit(update_guess=True, verbose=True)
 
 # Test emcee estimation
-#result_emcee = estim.emcee_orbit(nthreads=2)
+result_emcee = estim.emcee_orbit(nthreads=12, nsteps=500)
+estim.make_chains(200)
+estim.print_emcee_result(0.954)

@@ -493,7 +493,7 @@ class FullOrbit(object):
 
         Parameters
         ----------
-        theta: sequence
+        theta_list: sequence
 
         Returns
         -------
@@ -508,7 +508,7 @@ class FullOrbit(object):
         # Parametrization option-specific parameters
         if self.parametrization == 'mc10':
             theta['omega'] = theta_list[3]
-            theta['log_ecc'] = theta_list[4]
+            theta['ecc'] = theta_list[4]
         elif self.parametrization == 'exofast':
             theta['sqe_cosw'] = theta_list[3]
             theta['sqe_sinw'] = theta_list[4]
@@ -517,10 +517,10 @@ class FullOrbit(object):
         for i in range(self.n_ds):
             theta['gamma_{}'.format(i)] = theta_list[5 + i]
             if self.use_add_sigma is True:
-                theta['sigma_{}'.format(i)] = theta_list[5 + self.n_ds + i]
+                theta['log_sigma_{}'.format(i)] = theta_list[5 + self.n_ds + i]
 
-        lp = prior.flat(theta, self.bounds)
-        params = self.prepare_params(theta, self.bounds)
+        lp = prior.flat(theta, self.parametrization)
+        params = self.prepare_params(theta)
         if not np.isfinite(lp):
             return -np.inf
         return lp - 0.5 * self.lnlike(params)
@@ -554,25 +554,37 @@ class FullOrbit(object):
         sampler : ``emcee.EnsembleSampler``
             The resulting sampler object.
         """
-        self.ndim = len(self.keys)
 
         if ballsizes is None:
             ballsizes = {'log_k': 1E-4, 'log_period': 1E-4, 't0': 1E-4,
-                         'omega': 1E-4, 'log_ecc': 1E-4, 'sqe_cosw': 1E-4,
-                         'sqe_sinw': 1E-4, 'gamma': 1E-4, 'sigma': 1E-4}
+                         'omega': 1E-4, 'ecc': 1E-4, 'sqe_cosw': 1E-4,
+                         'sqe_sinw': 1E-4, 'gamma': 1E-4, 'log_sigma': 1E-4}
+
+        # The labels
+        if self.parametrization == 'mc10':
+            self.labels = ['\log{K}', '\log{T}', 't_0', '\omega',
+                           'e']
+        elif self.parametrization == 'exofast':
+            self.labels = ['\log{K}', '\log{T}', 't_0',
+                           '\sqrt{e} \cos{\omega}',
+                           '\sqrt{e} \sin{\omega}']
+        for i in range(self.n_ds):
+            self.labels.append('\gamma_{}'.format(i))
+            if self.use_add_sigma is True:
+                self.labels.append('\log{\sigma_%s}' % str(i))
 
         # Creating the pos array
         pos = []
         for n in range(nwalkers):
-            pos_n = [self.guess['log_k'] + ballsizes['log_k'] *
+            pos_n = [np.log10(self.guess['k']) + ballsizes['log_k'] *
                      np.random.normal(),
-                     self.guess['log_period'] + ballsizes['log_period'] *
+                     np.log10(self.guess['period']) + ballsizes['log_period'] *
                      np.random.normal(),
                      self.guess['t0'] + ballsizes['t0'] * np.random.normal()]
             if self.parametrization == 'mc10':
                 pos_n.append(self.guess['omega'] + ballsizes['omega'] *
                              np.random.normal())
-                pos_n.append(self.guess['log_ecc'] + ballsizes['log_ecc'] *
+                pos_n.append(self.guess['ecc'] + ballsizes['ecc'] *
                                         np.random.normal())
             elif self.parametrization == 'exofast':
                 pos_n.append(self.guess['sqe_cosw'] + ballsizes['sqe_cosw'] *
@@ -583,9 +595,11 @@ class FullOrbit(object):
                 pos_n.append(self.guess['gamma_{}'.format(i)] +
                              ballsizes['gamma'] * np.random.normal())
                 if self.use_add_sigma is True:
-                    pos_n.append(self.guess['sigma_{}'.format(i)] +
-                                 ballsizes['sigma'] * np.random.normal())
+                    pos_n.append(np.log10(self.guess['sigma_{}'.format(i)]) +
+                                 ballsizes['log_sigma'] * np.random.normal())
             pos.append(np.array(pos_n))
+
+        self.ndim = len(pos[0])
 
         sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.lnprob,
                                         a=p_scale, threads=nthreads)
@@ -624,19 +638,6 @@ class FullOrbit(object):
             n_rows = n_params // n_cols + 1
         else:
             n_rows = n_params // n_cols
-
-        # The labels
-        if self.parametrization == 'mc10':
-            self.labels = ['\log{K}', '\log{T}', 't_0', '\omega',
-                           'e']
-        elif self.parametrization == 'exofast':
-            self.labels = ['\log{K}', '\log{T}', 't_0',
-                           '\sqrt{e} \cos{\omega}',
-                           '\sqrt{e} \sin{\omega}']
-        for i in range(self.n_ds):
-            self.labels.append('\gamma_{}'.format(i))
-            if self.use_add_sigma is True:
-                self.labels.append('\sigma_{}'.format(i))
 
         # Finally Do the actual plot
         ind = 0  # The parameter index
@@ -728,8 +729,8 @@ class FullOrbit(object):
         hf_chains = np.array(self.emcee_chains)         # K and T from log to
         hf_chains[:, 0:2] = 10 ** (hf_chains[:, 0:2])   # linear
         if self.parametrization == 'mc10':
-            hf_chains[:, 3] = hf_chains[:, 3] * 180 / np.pi # rad to degrees
-            hf_chains[:, 4] = 10 ** hf_chains[:, 4]         # log to linear
+            hf_chains[:, 3] = hf_chains[:, 3] * 180 / np.pi     # rad to degrees
+            hf_chains[:, 4] = hf_chains[:, 4]
         elif self.parametrization == 'exofast':
             # Transform sqe_cosw and sqe_sinw to omega and ecc
             omega = (np.arctan2(hf_chains[:, 4], hf_chains[:, 3])) * 180 / np.pi
@@ -745,14 +746,19 @@ class FullOrbit(object):
             msm = main_star_mass * u.solMass
             k = hf_chains[:, 0] * u.m / u.s
             period = hf_chains[:, 1] * u.d
-            ecc = hf_chains[:, 5]
+            ecc = hf_chains[:, 4]
             f = (period * k ** 3 * (1 - ecc ** 2) ** (3 / 2) /
                  (2 * np.pi * c.G)).to(u.solMass)
-            msini = abs(np.roots([1, -f.value, -2 * msm.value * f.value,
-                                  -msm.value ** 2 * f.value])[0]) * u.solMass
+            msini = []
+            for i in range(len(f)):
+                msini.append(abs(np.roots([1,  -f[i].value,
+                                           -2 * msm.value * f[i].value,
+                                           -msm.value ** 2 * f[i].value])[0]))
+            msini = np.array(msini) * u.solMass
             semi_a = (np.sqrt(c.G * msini * period / k / (2 * np.pi) /
                               np.sqrt(1. - ecc) ** 2)).to(u.AU)
-            hf_perc = zip(*np.percentile(np.array([msini, semi_a]),
+            hf_perc = zip(*np.percentile(np.array([msini.value,
+                                                   semi_a.value]).T,
                                          [16, 50, 84], axis=0))
             hf_m_a = list(map(lambda v: (v[1], v[2] - v[1], v[1] - v[0]),
                                  hf_perc))
