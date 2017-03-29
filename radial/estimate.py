@@ -479,7 +479,7 @@ class FullOrbit(object):
 
         # Compute the semi-major axis in km and convert to AU
         semi_a = (np.sqrt(c.G * msini * period / k / (2 * np.pi) /
-                         np.sqrt(1. - ecc) ** 2)).to(u.AU)
+                         np.sqrt(1. - ecc ** 2))).to(u.AU)
         return msini.value, semi_a.value
 
     # The probability
@@ -764,7 +764,7 @@ class FullOrbit(object):
                              )
             msini = np.array(msini) * u.solMass
             semi_a = (np.sqrt(c.G * msini * period / k / (2 * np.pi) /
-                              np.sqrt(1. - ecc) ** 2)).to(u.AU)
+                              np.sqrt(1. - ecc ** 2))).to(u.AU)
             hf_perc = zip(*np.percentile(np.array([msini.value,
                                                    semi_a.value]).T,
                                          [16, 50, 84], axis=0))
