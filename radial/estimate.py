@@ -227,8 +227,8 @@ class FullOrbit(object):
                                     fmt=symbols[i])
                     ax_res.set_ylabel('Residuals\n(m / s)')
                     # Trick to make y-axis in residuals symmetric
-                    y_min = abs(np.min(res))
-                    y_max = abs(np.max(res))
+                    y_min = abs(np.min(res - self.rv_unc[i]))
+                    y_max = abs(np.max(res + self.rv_unc[i]))
                     y_limit = max([y_min, y_max]) * 1.1
                     ax_res.set_ylim(-y_limit, y_limit)
                     plt.setp(ax_res.get_xticklabels(), visible=False)
@@ -239,13 +239,14 @@ class FullOrbit(object):
                                     fmt=symbols[i],
                                     label=self.meta[i]['Instrument'])
                     ax_fit.plot(t_guess, rv_guess, color='k')
+                    ax_fit.set_xlim(0.0, 1.0)
                     # Plot the residuals
                     ax_res.errorbar(phase, res, yerr=self.rv_unc[i],
                                     fmt=symbols[i])
                     ax_res.set_ylabel('Residuals\n(m / s)')
                     # Trick to make y-axis in residuals symmetric
-                    y_min = abs(np.min(res))
-                    y_max = abs(np.max(res))
+                    y_min = abs(np.min(res - self.rv_unc[i]))
+                    y_max = abs(np.max(res + self.rv_unc[i]))
                     y_limit = max([y_min, y_max]) * 1.1
                     ax_res.set_ylim(-y_limit, y_limit)
                     plt.setp(ax_res.get_xticklabels(), visible=False)
