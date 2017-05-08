@@ -81,3 +81,4 @@ _templates/
 index.rst
 make.bat
 HIP67620.ipynb
+docs/usage_example.ipynb

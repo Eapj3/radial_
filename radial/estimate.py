@@ -243,6 +243,11 @@ class FullOrbit(object):
                     ax_res.errorbar(phase, res, yerr=self.rv_unc[i],
                                     fmt=symbols[i])
                     ax_res.set_ylabel('Residuals\n(m / s)')
+                    # Trick to make y-axis in residuals symmetric
+                    y_min = abs(np.min(res))
+                    y_max = abs(np.max(res))
+                    y_limit = max([y_min, y_max]) * 1.1
+                    ax_res.set_ylim(-y_limit, y_limit)
                     plt.setp(ax_res.get_xticklabels(), visible=False)
             else:
                 if fold is False:
