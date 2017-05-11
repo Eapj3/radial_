@@ -231,6 +231,7 @@ class FullOrbit(object):
                     y_max = abs(np.max(res + self.rv_unc[i]))
                     y_limit = max([y_min, y_max]) * 1.1
                     ax_res.set_ylim(-y_limit, y_limit)
+                    ax_res.axhline(y=0.0, linewidth=1, color='k', ls='--')
                     plt.setp(ax_res.get_xticklabels(), visible=False)
                 else:
                     # Plot the data and the curve
@@ -249,6 +250,7 @@ class FullOrbit(object):
                     y_max = abs(np.max(res + self.rv_unc[i]))
                     y_limit = max([y_min, y_max]) * 1.1
                     ax_res.set_ylim(-y_limit, y_limit)
+                    ax_res.axhline(y=0.0, linewidth=1, color='k', ls='--')
                     plt.setp(ax_res.get_xticklabels(), visible=False)
             else:
                 if fold is False:
