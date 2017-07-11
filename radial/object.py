@@ -31,7 +31,7 @@ class MainStar(object):
         self.name = name
 
         # The radial velocities corresponding to each individual companion
-        self.radial_v_ind = []
+        self.radial_v_ind = None
 
         # The total radial velocities
         self.radial_v = None
@@ -72,7 +72,8 @@ class Companion(object):
         Name of the companion. Default is ``None``.
     """
     def __init__(self, k=None, period_orb=None, t_0=None, omega=None, ecc=None,
-                 msini=None, semi_a=None, name=None, main_star=None):
+                 msini=None, semi_a=None, name=None, main_star=None, mass=None,
+                 sini=None):
         self.main_star = main_star
         self.msini = msini
         self.semi_a = semi_a
@@ -82,6 +83,20 @@ class Companion(object):
         self.omega = omega
         self.ecc = ecc
         self.name = name
+        self.mass = mass
+        self.sini = sini
+
+        # Computing k from msini and a
+        if self.sini is None:
+            self.sini = 1
+        else:
+            pass
+        if self.k is None:
+            self.k = self.mass * 2 * np.pi * self.semi_a * self.sini / \
+                (self.main_star.mass + self.mass) / self.period_orb / \
+                np.sqrt(1 - self.ecc ** 2)
+        else:
+            pass
 
 
 # The star-companion system class
@@ -94,7 +109,7 @@ class System(object):
     main_star : ``radial.object.MainStar``
         The main star of the system.
 
-    companions : list
+    companion : list
         Python list containing the all the ``radial.object.Companion`` of the
         system.
 
@@ -152,6 +167,7 @@ class System(object):
         """
         ts = self.time.to(u.d).value
         star = self.main_star
+        star.radial_v_ind = []
         for comp in self.companion:
             subsystem = orbit.BinarySystem(k=comp.k.to(u.m / u.s).value,
                                            period=comp.period_orb.to(u.d).value,
@@ -166,7 +182,7 @@ class System(object):
         star.radial_v_ind = star.radial_v_ind * u.m / u.s
 
     # Plot radial velocities of the main star
-    def plot_rv(self, companion_index=None):
+    def plot_rv(self, companion_index=None, plot_title=None):
         """
 
         Parameters
@@ -191,10 +207,12 @@ class System(object):
             ax.set_xlabel('Time ({})'.format(str(self.time.unit)))
             ax.set_ylabel('Radial velocities ({})'.format(
                 str(star.radial_v.unit)))
+            ax.set_title(plot_title)
         else:
             ax.plot(self.time, star.radial_v_ind[i])
             ax.set_xlabel('Time ({})'.format(str(self.time.unit)))
             ax.set_ylabel('Radial velocities ({})'.format(
                 str(star.radial_v_ind[i].unit)))
+            ax.set_title(plot_title)
 
         return fig, ax
