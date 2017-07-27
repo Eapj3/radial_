@@ -27,8 +27,6 @@ def flat(theta, parametrization):
         The prior probability for a given set of orbital and instrumental
         parameters.
     """
-    keys = theta.keys()
-
     # Compute the eccentricity beforehand to impose a prior of e < 1 on it
     if parametrization == 'mc10':
         ecc = theta['ecc']
