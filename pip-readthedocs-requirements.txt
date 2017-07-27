@@ -1,2 +1,2 @@
 numpydoc>=0.6
-sphinxcontrib>=1.0
+sphinxcontrib.napoleon>=1.0
