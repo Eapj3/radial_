@@ -82,3 +82,7 @@ index.rst
 make.bat
 HIP67620.ipynb
 docs/usage_example.ipynb
+/docs/_static/
+/docs/_build/
+/docs/.ipynb_checkpoints/
+/docs/_templates/
