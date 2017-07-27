@@ -1,1 +1,2 @@
+numpy>=1.12
 numpydoc>=0.6

@@ -129,9 +129,3 @@ Now we use a corner plot to analyze the posterior distributions of the parameter
     plt.show()
 
 .. image:: corner.png
-
-.. code:: python
-
-    estim.print_emcee_result(main_star_mass=0.954, # in M_sol units
-                             mass_sigma=0.006)
-

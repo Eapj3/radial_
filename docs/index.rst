@@ -14,9 +14,8 @@ Welcome to radial's documentation!
    :caption: Contents:
 
    install
-   modules
    examples
-
+   source/radial.rst
 
 
 .. Indices and tables
