@@ -1,0 +1,137 @@
+
+
+The binary star HIP 67620
+-------------------------
+
+Our objective in this notebook is to use radial velocity data of the solar twin HIP 67620 to estimate the projected mass, separation and other orbital parameters of its companion. We start by importing the necessary packages. Notice that we will specifically import the modules ``orbit``, ``estimate``, and ``dataset`` from the ``radial`` package.
+
+.. code:: python
+
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import matplotlib.pylab as pylab
+    import astropy.units as u
+    from radial import estimate, dataset
+
+We then extract the data from the text files located in the ``tests`` folder. They will be stored in ``RVDataSet`` objects, which are defined in the ``dataset`` module.
+
+.. code:: python
+
+    harps = dataset.RVDataSet(file='../../tests/HIP67620_HARPS.dat', # File name
+                              t_offset=-2.45E6,                 # Time offset (units of days)
+                              rv_offset='subtract_mean',        # RV offset
+                              instrument_name='HARPS',
+                              target_name='HIP 67620',
+                              skiprows=1,   # Number of rows to skip in the data file
+                              t_col=5,      # Column corresponding to time in the data file
+                              rv_col=6,     # Column corresponding to RVs
+                              rv_unc_col=7  # Column corresponding to RV ucnertainties
+                             )
+    aat = dataset.RVDataSet(file='../../tests/HIP67620_AAT.dat', t_offset=-2.45E6, rv_offset='subtract_mean',
+                              instrument_name='AATPS', target_name='HIP 67620', delimiter=',')
+    w16 = dataset.RVDataSet(file='../../tests/HIP67620_WF16.dat', t_offset=-5E4, rv_offset='subtract_mean',
+                             instrument_name='W16', target_name='HIP 67620', t_col=1,
+                             rv_col=3, rv_unc_col=4)
+
+We can visualize the radial velocities by running the function ``plot()`` of a given ``dataset`` object. For instance:
+
+.. code:: python
+
+    w16.plot()
+
+.. image:: w16.png
+
+Now that we have the data, how do we estimate the orbital parameters of the system? We use the methods and functions inside the `estimate` module. But first, we need to provide an initial guess for the orbital parameters. They are:
+
+* ``k``: radial velocity semi-amplitude :math:`K` (in m/s)
+* ``period``: orbital period :math:`T` (in days)
+* ``t0``: time of periastron passage :math:`t_0` (in days)
+* ``omega``: argument of periapse :math:`\omega` (in radians)
+* ``ecc``: eccentricity of the orbit :math:`e`
+* ``gamma_X``: RV offset :math:`\gamma` of the dataset number :math:`X` (in m/s)
+
+A first guess is usually an educated guess based on either a periodogram and/or simple visual inspection of the data.
+
+.. code:: python
+
+    # guess is a dictionary, which is a special type of "list" in python
+    # Instead of being indexed by a number, the items in a dictionary
+    # are indexed by a key (which is a string)
+    guess = {'k': 6000,
+             'period': 4000,
+             't0': 5000,
+             'omega': 180 * np.pi / 180,
+             'ecc': 0.3,
+             'gamma_0': 0,
+             'gamma_1': 0,
+             'gamma_2': 0}
+
+Now we need to instantiate a ``FullOrbit`` object with the datasets and our guess, as well as the parametrization option we want to use. Then, we plot it.
+
+.. code:: python
+
+    estim = estimate.FullOrbit(datasets=[harps, aat, w16],
+                               guess=guess,
+                               parametrization='mc10')
+    plot = estim.plot_rvs(plot_guess=True, fold=False, legend_loc=2)
+    plt.show()
+
+.. image:: first_guess.png
+
+We estimate the orbital parameters of the system using the Nelder-Mead optimization algorithm implemented in the ``lmfit`` package. This will compute the best solution or, in other words, the one that minimizes the residuals of the fit.
+
+It is probable that the first solutions are not good, and that is fine. Just run the estimation a couple of times until you get the satisfactory result.
+
+.. code:: python
+
+    result = estim.lmfit_orbit(update_guess=True)
+
+Now let's plot the solution we obtained.
+
+.. code:: python
+
+    pylab.rcParams['font.size'] = 12
+    fig, gs = estim.plot_rvs(plot_guess=True, fold=False, legend_loc=4)
+
+.. image:: ML_fit.png
+
+If the result looks good, that is great: we have the best solution of the orbit. However, we still need to estimate uncertainties for the orbital parameters. We do that using ``emcee``. This is a Markov-Chain Monte Carlo (MCMC) simulation, in which we simulate a bunch of sets of orbital parameters that could still fit the data given the uncertainties of the observations, but are a little bit off from the best solution. They will make up the uncertainties of the fit.
+
+This simulation starts from the best solution and do random walks across the parameter space. We will provide the number of *walkers* (``nwalkers``) for the MCMC simulation, as well as the number of *steps* (``nsteps``) that each one will take.
+
+How do we know the number of walkers and steps to use? As a general rule of thumb, it is recommended to use at least 2 times the number of parameters for the number of walkers, and as many steps as it takes for the simulation to converge.
+
+**Note**: We can use multiprocessing in ``emcee`` to make the calculations somewhat faster. For that, we need to provide the number of processing threads (in the parameter ``nthreads``) of your computer. Most laptops have 2 or 4 threads.
+
+.. code:: python
+
+    estim.emcee_orbit(nwalkers=16, nsteps=10000, nthreads=1)
+
+With that done, we plot the walkers to see how the simulation went.
+
+.. code:: python
+
+    estim.plot_emcee_sampler()
+
+.. image:: walkers.png
+
+Let's cut the beginning of the simulation (the first 500 steps) because they correspond to the *burn-in* phase.
+
+.. code:: python
+
+    estim.make_chains(500)
+
+Now we use a corner plot to analyze the posterior distributions of the parameters, as well as the correlations between them.
+
+.. code:: python
+
+    fig = estim.plot_corner()
+    plt.show()
+
+.. image:: corner.png
+
+.. code:: python
+
+    estim.print_emcee_result(main_star_mass=0.954, # in M_sol units
+                             mass_sigma=0.006)
+

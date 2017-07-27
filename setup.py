@@ -15,7 +15,7 @@ if sys.argv[-1] == "publish":
 
 setup(
     name="radial",
-    version="0.4a",
+    version="0.5a",
     author="Leonardo dos Santos",
     author_email="leonardoags@usp.br",
     packages=["radial"],

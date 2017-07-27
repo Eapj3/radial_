@@ -13,11 +13,14 @@ Welcome to radial's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   install
+   modules
+   examples
 
 
-Indices and tables
-==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. Indices and tables
+   ==================
+   * :ref:`genindex`
+   * :ref:`modindex`
+   * :ref:`search`
