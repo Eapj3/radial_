@@ -1,12 +1,4 @@
-# Temporarily ignore
-Makefile
-conf.py
-*.csv
-*.png
-scripts/
-
 # Files to be untracked for now
-test.py
 .DS*
 .idea/
 
@@ -22,9 +14,9 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-.Python
-env/
-build/
+#.Python
+#env/
+#build/
 develop-eggs/
 dist/
 downloads/
@@ -69,20 +61,15 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+docs/_static/
+docs/_templates/
 
 # PyBuilder
 target/
 
 #Ipython Notebook
 .ipynb_checkpoints
-_build/
-_static/
-_templates/
-index.rst
-make.bat
 HIP67620.ipynb
+
+# Other stuff
 docs/usage_example.ipynb
-/docs/_static/
-/docs/_build/
-/docs/.ipynb_checkpoints/
-/docs/_templates/
