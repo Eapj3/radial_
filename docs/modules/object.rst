@@ -3,7 +3,7 @@
 Object
 ------
 .. py:currentmodule:: radial.object
-.. automodule:: object
+.. automodule:: radial.object
 .. autoclass:: MainStar
    :members:
 .. autoclass:: Companion

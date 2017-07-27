@@ -22,8 +22,8 @@ setup(
     url="https://github.com/RogueAstro/radial",
     license="MIT",
     description="Radial velocities analysis with Python",
-    install_requires=["numpy", "scipy", "matplotlib", "emcee", "corner",
-                      "lmfit", "astropy"],
+    install_requires=[line.strip() for line in
+                      open('requirements.txt', 'r').readlines()],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Science/Research",

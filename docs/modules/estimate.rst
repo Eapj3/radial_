@@ -4,6 +4,6 @@ Estimate
 --------
 
 .. py:currentmodule:: radial.estimate
-.. automodule:: estimate
+.. automodule:: radial.estimate
 .. autoclass:: FullOrbit
    :members:

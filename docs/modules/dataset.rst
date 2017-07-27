@@ -4,6 +4,6 @@ Dataset
 -------
 
 .. py:currentmodule:: radial.dataset
-.. automodule:: dataset
+.. automodule:: radial.dataset
 .. autoclass:: RVDataSet
    :members:

@@ -3,6 +3,6 @@
 Orbit
 -----
 .. py:currentmodule:: radial.orbit
-.. automodule:: orbit
+.. automodule:: radial.orbit
 .. autoclass:: BinarySystem
    :members:
