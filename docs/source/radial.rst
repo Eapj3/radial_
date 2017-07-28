@@ -17,10 +17,10 @@ radial\.estimate module
     :undoc-members:
     :show-inheritance:
 
-radial\.object module
+radial\.body module
 ---------------------
 
-.. automodule:: radial.object
+.. automodule:: radial.body
     :members:
     :undoc-members:
     :show-inheritance:

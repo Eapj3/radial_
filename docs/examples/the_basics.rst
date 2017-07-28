@@ -17,7 +17,7 @@ In this notebook, we will play around with the package ``radial`` to simulate ra
 
 .. code:: python
 
-    from radial import object
+    from radial import body
     import astropy.units as u
     import numpy as np
     import matplotlib.pyplot as plt
@@ -28,7 +28,7 @@ Let's start with a very familiar object: the Sun.
 
 .. code:: python
 
-    sun = object.MainStar(mass=1 * u.solMass, name='Sun')
+    sun = body.MainStar(mass=1 * u.solMass, name='Sun')
 
 Now let's setup a couple of companions for the Sun. How about Earth and Jupiter?
 
@@ -59,14 +59,14 @@ where :math:`m` is the companion mass, :math:`M` is the mass of the main star, :
     k_j = compute_k(mass_j, period_j, semia_j, ecc_j)
 
     # Setting up the companions
-    earth = object.Companion(main_star=sun,
+    earth = body.Companion(main_star=sun,
                              k = k_e,
                              period_orb=period_e,
                              t_0=2457758.01181 * u.d,    # Time of periastron passage, Julian Date
                              omega=114.207 * u.deg,      # Argument of periapsis/perihelion
                              ecc=ecc_e)
 
-    jupiter = object.Companion(main_star=sun,
+    jupiter = body.Companion(main_star=sun,
                                k=k_j,
                                period_orb=period_j,
                                t_0=2455636.95833 * u.d,
@@ -80,7 +80,7 @@ The next step is to setup the Solar System with the Sun and its planetary compan
     time = np.linspace(2453375, 2457758, 1000) * u.d    # ~12 years
 
     # The Solar System
-    sys = object.System(main_star=sun,
+    sys = body.System(main_star=sun,
                         companion=[earth, jupiter],
                         time=time)
 

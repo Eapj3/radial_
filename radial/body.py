@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt
 from radial import orbit
 
 """
-This module contains the massive object classes that make up a star-planet
-system.
+This module contains the massive body classes that make up a star-planet system.
 """
 
 
