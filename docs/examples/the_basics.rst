@@ -37,7 +37,7 @@ Thei radial velocity semi-amplitude is not easily accessible from online databas
 .. math::
     K = \frac{m \sin{I}}{m + M} \frac{2\pi}{T} \frac{\ a}{\sqrt{1-e^2}} \mathrm{,}
 
-where :math:`m` is the companion mass, :math:`M` is the mass of the main star, :math:`I` is the inclination angle between the reference plane and the axis of the orbit (let's consider :math:`I = \pi` in this example) and :math:`a` is the semi-major axis of the orbit. All these parameters are easily accessible to us.
+where :math:`m` is the companion mass, :math:`M` is the mass of the main star, :math:`I` is the inclination angle between the reference plane and the axis of the orbit (let's consider :math:`I = \pi / 2` in this example) and :math:`a` is the semi-major axis of the orbit. All these parameters are easily accessible to us.
 
 .. code:: python
 
