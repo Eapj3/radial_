@@ -225,7 +225,7 @@ class FullOrbit(object):
                     # Plot the residuals
                     ax_res.errorbar(self.t[i], res, yerr=self.rv_unc[i],
                                     fmt=symbols[i])
-                    ax_res.set_ylabel('Residuals\n(m / s)')
+                    ax_res.set_ylabel('Residuals\n(m s$^{-1}$)')
                     # Trick to make y-axis in residuals symmetric
                     y_min = abs(np.min(res - self.rv_unc[i]))
                     y_max = abs(np.max(res + self.rv_unc[i]))
@@ -244,7 +244,7 @@ class FullOrbit(object):
                     # Plot the residuals
                     ax_res.errorbar(phase, res, yerr=self.rv_unc[i],
                                     fmt=symbols[i])
-                    ax_res.set_ylabel('Residuals\n(m / s)')
+                    ax_res.set_ylabel('Residuals\n(m s$^{-1}$)')
                     # Trick to make y-axis in residuals symmetric
                     y_min = abs(np.min(res - self.rv_unc[i]))
                     y_max = abs(np.max(res + self.rv_unc[i]))
@@ -268,7 +268,7 @@ class FullOrbit(object):
             ax_fit.set_xlabel('Time (d)')
         else:
             ax_fit.set_xlabel('Phase')
-        ax_fit.set_ylabel('Radial velocities (m / s)')
+        ax_fit.set_ylabel('Radial velocities (m s$^{-1}$)')
         ax_fit.set_title('{}'.format(self.meta[0]['Target']))
         ax_fit.legend(loc=legend_loc, numpoints=1)
         plt.tight_layout()
