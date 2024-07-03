@@ -4,16 +4,20 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
+from threadpoolctl import ThreadpoolController
 import numpy as np
 from radial import orbit, dataset, rv_model, prior
 import scipy.signal as ss
 import matplotlib.pyplot as plt
 import matplotlib.markers as mrk
+import matplotlib.gridspec as gridspec
 import lmfit
 import corner
 import emcee
 import astropy.units as u
 import astropy.constants as c
+from multiprocessing import Pool
+import os
 
 """
 This code contains routines to estimate the orbital parameters of a binary
@@ -87,7 +91,7 @@ class FullOrbit(object):
             self.t.append(dsk.t.to(u.d).value)
             self.rv.append(dsk.rv.to(u.m / u.s).value)
             self.rv_unc.append(dsk.rv_unc.to(u.m / u.s).value)
-            self.meta.append(dsk.table.meta)
+            self.meta.append(dsk.   table.meta)
 
         self.use_add_sigma = use_add_sigma
 
@@ -172,13 +176,14 @@ class FullOrbit(object):
             raise NotImplementedError('Plot of emcee samples is not supported'
                                       'yet.')
 
+
         # Use matplotlib's default symbols if ``None`` is passed.
         if symbols is None:
-            markers = mrk.MarkerStyle()
+            markers = mrk.MarkerStyle("")
             symbols = markers.filled_markers
 
         fig = plt.figure(figsize=(6, 5))
-        gs = plt.GridSpec(2, 1, height_ratios=(4, 1))
+        gs = gridspec.GridSpec(2, 1, height_ratios=(4, 1))
         ax_fit = fig.add_subplot(gs[0])
 
         self.residuals = []
@@ -536,7 +541,7 @@ class FullOrbit(object):
         return lp - 0.5 * self.lnlike(params)
 
     # Using emcee to estimate the orbital parameters
-    def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, nthreads=1,
+    def emcee_orbit(self, nwalkers=20, nsteps=1000, p_scale=2.0, threads_per_worker=2,
                     ballsizes=None):
         """
         Calculates samples of parameters that best fit the signal rv.
@@ -552,8 +557,11 @@ class FullOrbit(object):
         p_scale : ``float``, optional
             The proposal scale parameter. Default is 2.0.
 
-        nthreads : ``int``
-            Number of threads in your machine
+        threads_per_worker : ``int``
+            Number of threads per worker. There will be as many workers
+            such that each uses exactly threads_per_worker threads. For
+            full utilization choose a number that divides the number
+            of logical processors in your machine.
 
         ballsizes : ``dict``
             The one-dimensional size of the volume from which to generate a
@@ -572,16 +580,16 @@ class FullOrbit(object):
 
         # The labels
         if self.parametrization == 'mc10':
-            self.labels = ['\log{K}', '\log{T}', 't_0', '\omega',
+            self.labels = [r'\log{K}', r'\log{T}', 't_0', r'\omega',
                            'e']
         elif self.parametrization == 'exofast':
-            self.labels = ['\log{K}', '\log{T}', 't_0',
-                           '\sqrt{e} \cos{\omega}',
-                           '\sqrt{e} \sin{\omega}']
+            self.labels = [r'\log{K}', r'\log{T}', 't_0',
+                           r'\sqrt{e} \cos{\omega}',
+                           r'\sqrt{e} \sin{\omega}']
         for i in range(self.n_ds):
-            self.labels.append('\gamma_{}'.format(i))
+            self.labels.append(r'\gamma_{}'.format(i))
             if self.use_add_sigma is True:
-                self.labels.append('\log{\sigma_%s}' % str(i))
+                self.labels.append(r'\log{\sigma_%s}' % str(i))
 
         # Creating the pos array
         pos = []
@@ -614,10 +622,12 @@ class FullOrbit(object):
             pos.append(np.array(pos_n))
 
         self.ndim = len(pos[0])
-
-        sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.lnprob,
-                                        a=p_scale, threads=nthreads)
-        sampler.run_mcmc(pos, nsteps)
+        controller = ThreadpoolController()
+        with controller.limit(limits=threads_per_worker, user_api='blas'):
+            with Pool(os.cpu_count() // threads_per_worker) as pool_:
+                sampler = emcee.EnsembleSampler(nwalkers, self.ndim, self.lnprob, pool=pool_,
+                                                moves=emcee.moves.StretchMove(a=p_scale))
+                sampler.run_mcmc(pos, nsteps)
         self.sampler = sampler
         return sampler
 
@@ -738,7 +748,7 @@ class FullOrbit(object):
                   (result[i][0], result[i][1], result[i][2]))
 
         # Work out the human-friendly results
-        hf_labels = ['K', 'T', 't_0', '\omega', 'e']
+        hf_labels = ['K', 'T', 't_0', r'\omega', 'e']
         units = ['m / s', 'd', 'd', 'deg', ' ']
         hf_chains = np.array(self.emcee_chains)         # K and T from log to
         hf_chains[:, 0:2] = 10 ** (hf_chains[:, 0:2])   # linear
@@ -790,7 +800,7 @@ class FullOrbit(object):
                   (hf_result[i][0], hf_result[i][1], hf_result[i][2], units[i]))
 
         try:
-            print('m \sin{i}= %.5f^{+%.5f}_{-%.5f} solMass' %
+            print(r'm \sin{i}= %.5f^{+%.5f}_{-%.5f} solMass' %
                   (hf_m_a[0][0], hf_m_a[0][1], hf_m_a[0][2]))
             print('a= %.5f^{+%.5f}_{-%.5f} AU' %
                   (hf_m_a[1][0], hf_m_a[1][1], hf_m_a[1][2]))

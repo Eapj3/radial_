@@ -1,0 +1,16 @@
+name: radial
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - astropy
+  - corner
+  - emcee
+  - matplotlib
+  - scipy
+  - jupyter
+  - numpy
+  - pip
+  - pip:
+    - lmfit
+    - threadpoolctl
