@@ -5,6 +5,8 @@ import sys
 
 # Transforms NASA .tbl to JSON format
 # $python3 example.tbl /path/to/data/folder
+# Creates a new directory named as the STAR_ID and saves the data from example.tbl into JSON
+# file named as the INSTRUMENT
 
 
 def restruct(lines: list[str], headers: list = None, extra: list = None,

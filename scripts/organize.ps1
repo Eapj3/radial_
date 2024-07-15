@@ -1,3 +1,6 @@
+# Run in same directory as 'archive' directory without arguments
+# Works with data downloaded from ESO Archive
+
 mkdir Ancillary
 mkdir Spectra
 

@@ -1,6 +1,6 @@
 #! /bin/bash
-# Run in same directory as 'archive' directory
-
+# Run in same directory as 'archive' directory without arguments
+# Works with data downloaded from ESO Archive
 mkdir Ancillary
 mkdir Spectra
 
