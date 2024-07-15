@@ -91,7 +91,7 @@ class FullOrbit(object):
             self.t.append(dsk.t.to(u.d).value)
             self.rv.append(dsk.rv.to(u.m / u.s).value)
             self.rv_unc.append(dsk.rv_unc.to(u.m / u.s).value)
-            self.meta.append(dsk.   table.meta)
+            self.meta.append(dsk.table.meta)
 
         self.use_add_sigma = use_add_sigma
 
